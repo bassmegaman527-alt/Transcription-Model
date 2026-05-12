@@ -26,7 +26,7 @@ The README is what most visitors see first on the **Code** tab. Keep these secti
 1. **Project name and one-sentence pitch**
    * Example: `Transcribe, summarize, and brainstorm with an Android-first idea capture app.`
 2. **Current status**
-   * Explain that the repo currently contains an Android prototype with SpeechRecognizer-powered live transcription and local structuring.
+   * Explain that the repo currently contains an Android prototype with fake live transcription and local structuring.
 3. **Product documentation**
    * Link to `SPEC-1` and `NEXT_STEPS`.
 4. **Android prototype**

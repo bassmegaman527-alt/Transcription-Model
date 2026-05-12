@@ -77,7 +77,7 @@ Implement the visible capture experience with a testable state model before real
    * `Failed`.
 2. Implement one large start/stop button on the home screen.
 3. Render committed transcript text separately from the current partial transcript.
-4. Use Android SpeechRecognizer callbacks to emit partial and final transcript text.
+4. Add preview/fake streaming mode that emits sample transcript segments.
 5. Add state transition unit tests.
 
 ### Acceptance criteria
@@ -103,7 +103,7 @@ Build reliability before connecting to the real transcription provider.
 
 * Recording mode can continue while the app is backgrounded.
 * The user can stop capture from the notification.
-* If the app process is killed during a speech-recognition capture session, the partial transcript can be recovered from Room.
+* If the app process is killed during a fake capture session, the partial transcript can be recovered from Room.
 
 ## 6. Phase 4: Backend relay skeleton
 
@@ -194,12 +194,12 @@ Create these issues first, in order:
 2. Scaffold Ktor relay workspace.
 3. Configure Firebase anonymous auth for development.
 4. Add Firestore note schema and security rules draft.
-5. Implement capture state machine around SpeechRecognizer partial/final transcript callbacks.
-6. Implement foreground service notification for active speech capture.
+5. Implement capture state machine with fake transcript stream.
+6. Implement foreground service notification with fake recording.
 7. Add Room checkpoint schema and recovery test.
 8. Add relay WebSocket contract tests.
-9. Add relay contract tests before replacing local SpeechRecognizer with provider streaming.
-10. Integrate provider realtime transcription behind a feature flag.
+9. Connect Android fake stream to relay fake stream.
+10. Integrate real realtime transcription behind a feature flag.
 
 ## 11. Definition of MVP done
 
