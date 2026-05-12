@@ -71,12 +71,12 @@ class AndroidSpeechTranscriber(
 
                 override fun onResults(results: Bundle?) {
                     isStartPending = false
-                    results.bestRecognitionResult()?.let(onFinalTranscript)
+                    results?.bestRecognitionResult()?.let(onFinalTranscript)
                     restartIfNeeded()
                 }
 
                 override fun onPartialResults(partialResults: Bundle?) {
-                    partialResults.bestRecognitionResult()?.let(onPartialTranscript)
+                    partialResults?.bestRecognitionResult()?.let(onPartialTranscript)
                 }
 
                 override fun onEvent(eventType: Int, params: Bundle?) = Unit
