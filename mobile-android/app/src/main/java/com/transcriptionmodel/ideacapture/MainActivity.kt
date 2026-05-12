@@ -2,6 +2,7 @@ package com.transcriptionmodel.ideacapture
 
 import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -37,6 +38,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -48,6 +51,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
 import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
@@ -64,26 +71,106 @@ private enum class AppTab(val label: String) {
     Inbox("Inbox"),
 }
 
+private enum class CaptureStatus {
+    Idle,
+    Recording,
+    Structured,
+    Failed,
+}
+
+private data class ActionItem(
+    val id: String = UUID.randomUUID().toString(),
+    val text: String,
+    val done: Boolean = false,
+)
+
+private data class StructuredNote(
+    val title: String,
+    val summary: String,
+    val tags: List<String>,
+    val actionItems: List<ActionItem>,
+)
+
+private data class Note(
+    val id: String = UUID.randomUUID().toString(),
+    val rawTranscript: String,
+    val structured: StructuredNote,
+    val createdAtMillis: Long = System.currentTimeMillis(),
+    val durationMillis: Long,
+) {
+    val displayTime: String
+        get() = timeFormatter.format(Date(createdAtMillis))
+
+    val durationSeconds: Long
+        get() = durationMillis.coerceAtLeast(0L) / 1_000L
+
+    private companion object {
+        val timeFormatter = SimpleDateFormat("MMM d, h:mm a", Locale.getDefault())
+    }
+}
+
+private data class CaptureSession(
+    val status: CaptureStatus = CaptureStatus.Idle,
+    val startedAtMillis: Long? = null,
+    val committedTranscript: String = "",
+    val partialTranscript: String = "",
+    val errorMessage: String? = null,
+) {
+    val isRecording: Boolean = status == CaptureStatus.Recording
+
+    val liveTranscript: String
+        get() = listOf(committedTranscript, partialTranscript)
+            .filter { it.isNotBlank() }
+            .joinToString(" ")
+}
+
 @Composable
 fun IdeaCaptureApp() {
     MaterialTheme(colorScheme = lightColorScheme()) {
         Surface(modifier = Modifier.fillMaxSize()) {
             val context = LocalContext.current
             var selectedTab by remember { mutableStateOf(AppTab.Capture) }
-            var session by remember { mutableStateOf(CaptureSession()) }
+            val sessionState = remember { mutableStateOf(CaptureSession()) }
+            var session by sessionState
             var notes by remember { mutableStateOf(seedNotes()) }
-            var sampleIndex by remember { mutableIntStateOf(0) }
-
-            LaunchedEffect(session.status, sampleIndex) {
-                if (!session.isRecording) return@LaunchedEffect
-
-                delay(700L)
-                val next = sampleTranscriptSegments[sampleIndex % sampleTranscriptSegments.size]
-                session = session.copy(
-                    committedTranscript = appendTranscript(session.committedTranscript, session.partialTranscript),
-                    partialTranscript = next,
+            val speechTranscriber = remember {
+                AndroidSpeechTranscriber(
+                    context = context.applicationContext,
+                    onPartialTranscript = { partialTranscript ->
+                        val currentSession = sessionState.value
+                        if (currentSession.isRecording) {
+                            sessionState.value = currentSession.copy(
+                                partialTranscript = partialTranscript,
+                                errorMessage = null,
+                            )
+                        }
+                    },
+                    onFinalTranscript = { finalTranscript ->
+                        val currentSession = sessionState.value
+                        if (currentSession.isRecording) {
+                            sessionState.value = currentSession.copy(
+                                committedTranscript = appendTranscript(
+                                    currentSession.committedTranscript,
+                                    finalTranscript,
+                                ),
+                                partialTranscript = "",
+                                errorMessage = null,
+                            )
+                        }
+                    },
+                    onErrorMessage = { message ->
+                        val currentSession = sessionState.value
+                        if (currentSession.isRecording) {
+                            sessionState.value = currentSession.copy(errorMessage = message)
+                        }
+                    },
                 )
-                sampleIndex += 1
+            }
+
+            DisposableEffect(speechTranscriber) {
+                onDispose {
+                    speechTranscriber.destroy()
+                }
             }
 
             Scaffold(
@@ -106,17 +193,22 @@ fun IdeaCaptureApp() {
                         notesCount = notes.size,
                         modifier = Modifier.padding(innerPadding),
                         onStart = {
-                            requestCapturePermissionsIfNeeded(context)
-                            context.startForegroundCaptureService()
-                            session = CaptureSession(
-                                status = CaptureStatus.Recording,
-                                startedAtMillis = System.currentTimeMillis(),
-                                partialTranscript = sampleTranscriptSegments.first(),
-                            )
-                            sampleIndex = 1
+                            if (!hasCapturePermissions(context)) {
+                                requestCapturePermissionsIfNeeded(context)
+                                session = CaptureSession(
+                                    status = CaptureStatus.Failed,
+                                    errorMessage = "Microphone permission is required. Grant it, then tap Start again.",
+                                )
+                            } else {
+                                session = CaptureSession(
+                                    status = CaptureStatus.Recording,
+                                    startedAtMillis = System.currentTimeMillis(),
+                                )
+                                speechTranscriber.start()
+                            }
                         },
                         onStop = {
-                            context.stopService(Intent(context, CaptureForegroundService::class.java))
+                            speechTranscriber.stop()
                             val rawTranscript = appendTranscript(
                                 session.committedTranscript,
                                 session.partialTranscript,
@@ -181,6 +273,7 @@ private fun CaptureScreen(
                         text = when (session.status) {
                             CaptureStatus.Recording -> "Recording live"
                             CaptureStatus.Structured -> "Last capture saved"
+                            CaptureStatus.Failed -> "Speech recognition needs attention"
                             else -> "Ready to capture"
                         },
                         style = MaterialTheme.typography.titleLarge,
@@ -209,13 +302,21 @@ private fun CaptureScreen(
                         text = session.liveTranscript.ifBlank { "Your words will appear here as you speak." },
                         style = MaterialTheme.typography.bodyLarge,
                     )
+                    session.errorMessage?.let { message ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
             }
         }
 
         item {
             Text(
-                text = "Prototype note: this first app version uses a local fake transcript stream while the foreground service, UI states, and structured-note inbox are wired up for real streaming integration.",
+                text = "Speech recognition uses Android SpeechRecognizer. Speak after tapping Start, then tap Stop to save the recognized transcript into the inbox.",
                 style = MaterialTheme.typography.bodySmall,
             )
         }
@@ -305,26 +406,18 @@ private fun NoteCard(note: Note) {
 private fun requestCapturePermissionsIfNeeded(context: Context) {
     if (context !is MainActivity) return
 
-    val permissions = buildList {
-        add(Manifest.permission.RECORD_AUDIO)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }.filter { permission -> context.checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED }
+    val permissions = capturePermissions()
+        .filter { permission -> context.checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED }
 
     if (permissions.isNotEmpty()) {
         context.requestPermissions(permissions.toTypedArray(), 42)
     }
 }
 
-private fun Context.startForegroundCaptureService() {
-    val intent = Intent(this, CaptureForegroundService::class.java)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        startForegroundService(intent)
-    } else {
-        startService(intent)
-    }
-}
+private fun hasCapturePermissions(context: Context): Boolean = capturePermissions()
+    .all { permission -> context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED }
+
+private fun capturePermissions(): List<String> = listOf(Manifest.permission.RECORD_AUDIO)
 
 private fun appendTranscript(committed: String, partial: String): String =
     listOf(committed, partial)
@@ -343,12 +436,71 @@ private fun seedNotes(): List<Note> {
     )
 }
 
-private val sampleTranscriptSegments = listOf(
-    "I should build",
-    "a faster way to capture ideas",
-    "with one tap recording",
-    "live transcription",
-    "and automatic summaries",
-    "Need to prototype the foreground service",
-    "then connect the realtime relay",
+private fun structureTranscript(rawTranscript: String): StructuredNote {
+    val cleanWords = rawTranscript
+        .split(' ', '\n', '\t')
+        .map { it.trim(',', '.', '!', '?', ':', ';', '"').lowercase() }
+        .filter { it.length > 3 }
+
+    val title = rawTranscript
+        .split('.', '!', '?')
+        .firstOrNull { it.isNotBlank() }
+        ?.trim()
+        ?.take(60)
+        ?.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+        ?: "Untitled idea"
+
+    val summary = when {
+        rawTranscript.length <= 180 -> rawTranscript
+        else -> rawTranscript.take(177).trimEnd() + "..."
+    }
+
+    val tags = cleanWords
+        .groupingBy { it }
+        .eachCount()
+        .entries
+        .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+        .map { it.key }
+        .filterNot { it in fillerWords }
+        .take(5)
+        .ifEmpty { listOf("idea") }
+
+    val actionItems = rawTranscript
+        .split('.', '!', '?')
+        .map { it.trim() }
+        .filter { sentence -> actionPrefixes.any { sentence.lowercase().startsWith(it) } }
+        .distinctBy { it.lowercase() }
+        .take(5)
+        .map { ActionItem(text = it) }
+
+    return StructuredNote(
+        title = title,
+        summary = summary,
+        tags = tags,
+        actionItems = actionItems,
+    )
+}
+
+private val fillerWords = setOf(
+    "about",
+    "after",
+    "again",
+    "because",
+    "could",
+    "should",
+    "that",
+    "this",
+    "with",
+)
+
+private val actionPrefixes = listOf(
+    "i need to",
+    "need to",
+    "todo",
+    "to do",
+    "remember to",
+    "follow up",
+    "create",
+    "build",
+    "write",
 )
