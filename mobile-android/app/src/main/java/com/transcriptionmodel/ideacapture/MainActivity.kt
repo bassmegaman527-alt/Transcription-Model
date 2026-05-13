@@ -31,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -95,6 +96,7 @@ fun IdeaCaptureApp() {
             val sessionState = remember { mutableStateOf(CaptureSession()) }
             var session by sessionState
             var notes by remember { mutableStateOf(emptyList<Note>()) }
+            var inboxSearchQuery by remember { mutableStateOf("") }
             val coroutineScope = rememberCoroutineScope()
 
             LaunchedEffect(appContext) {
@@ -213,6 +215,8 @@ fun IdeaCaptureApp() {
 
                     AppTab.Inbox -> InboxScreen(
                         notes = notes,
+                        searchQuery = inboxSearchQuery,
+                        onSearchQueryChange = { inboxSearchQuery = it },
                         modifier = Modifier.padding(innerPadding),
                         onStartCapture = { selectedTab = AppTab.Capture },
                     )
@@ -312,9 +316,13 @@ private fun CaptureScreen(
 @Composable
 private fun InboxScreen(
     notes: List<Note>,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
     onStartCapture: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val visibleNotes = notes.filterBySearchQuery(searchQuery)
+
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(20.dp),
@@ -336,18 +344,34 @@ private fun InboxScreen(
             }
         }
 
-        if (notes.isEmpty()) {
+        item {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = onSearchQueryChange,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("Search notes") },
+                placeholder = { Text("Search title, transcript, tags, or tasks") },
+            )
+        }
+
+        if (visibleNotes.isEmpty()) {
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(20.dp)) {
-                        Text("No notes yet", style = MaterialTheme.typography.titleMedium)
-                        Text("Start a capture to create your first idea note.")
+                        Text(
+                            text = if (searchQuery.isBlank()) "No notes yet" else "No matching notes.",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        if (searchQuery.isBlank()) {
+                            Text("Start a capture to create your first idea note.")
+                        }
                     }
                 }
             }
         }
 
-        items(notes, key = { it.id }) { note ->
+        items(visibleNotes, key = { it.id }) { note ->
             NoteCard(note = note)
         }
     }
@@ -386,6 +410,25 @@ private fun NoteCard(note: Note) {
             }
         }
     }
+}
+
+private fun List<Note>.filterBySearchQuery(query: String): List<Note> {
+    val normalizedQuery = query.trim().lowercase()
+    if (normalizedQuery.isBlank()) return this
+
+    return filter { note -> note.matchesSearchQuery(normalizedQuery) }
+}
+
+private fun Note.matchesSearchQuery(query: String): Boolean {
+    val searchableText = buildString {
+        append(structured.title).append(' ')
+        append(rawTranscript).append(' ')
+        append(structured.summary).append(' ')
+        append(structured.tags.joinToString(" ")).append(' ')
+        append(structured.actionItems.joinToString(" ") { it.text })
+    }.lowercase()
+
+    return searchableText.contains(query)
 }
 
 private fun hasCapturePermissions(context: Context): Boolean = capturePermissions()
