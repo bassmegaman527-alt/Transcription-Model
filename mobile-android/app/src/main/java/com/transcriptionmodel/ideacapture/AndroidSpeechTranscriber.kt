@@ -20,6 +20,7 @@ class AndroidSpeechTranscriber(
     private var speechRecognizer: SpeechRecognizer? = null
     private var shouldKeepListening = false
     private var isStartPending = false
+    private var latestPartialTranscript = ""
 
     fun start() {
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
@@ -27,15 +28,17 @@ class AndroidSpeechTranscriber(
             return
         }
 
+        latestPartialTranscript = ""
         shouldKeepListening = true
         ensureRecognizer()
         startListening()
     }
 
-    fun stop() {
+    fun stopAndGetPendingTranscript(): String {
         shouldKeepListening = false
         isStartPending = false
         speechRecognizer?.stopListening()
+        return latestPartialTranscript
     }
 
     fun destroy() {
@@ -71,12 +74,16 @@ class AndroidSpeechTranscriber(
 
                 override fun onResults(results: Bundle?) {
                     isStartPending = false
-                    results?.bestRecognitionResult()?.let(onFinalTranscript)
+                    latestPartialTranscript = ""
+                    results.bestRecognitionResult()?.let(onFinalTranscript)
                     restartIfNeeded()
                 }
 
                 override fun onPartialResults(partialResults: Bundle?) {
-                    partialResults?.bestRecognitionResult()?.let(onPartialTranscript)
+                    partialResults.bestRecognitionResult()?.let { partialTranscript ->
+                        latestPartialTranscript = partialTranscript
+                        onPartialTranscript(partialTranscript)
+                    }
                 }
 
                 override fun onEvent(eventType: Int, params: Bundle?) = Unit
@@ -109,6 +116,8 @@ class AndroidSpeechTranscriber(
         putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
         putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, COMPLETE_SILENCE_MS)
+        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, POSSIBLY_COMPLETE_SILENCE_MS)
     }
 
     private fun Bundle.bestRecognitionResult(): String? = getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
@@ -131,6 +140,8 @@ class AndroidSpeechTranscriber(
 
     private companion object {
         const val RESTART_DELAY_MS = 250L
+        const val COMPLETE_SILENCE_MS = 1_500L
+        const val POSSIBLY_COMPLETE_SILENCE_MS = 750L
 
         val recoverableErrors = setOf(
             SpeechRecognizer.ERROR_NETWORK_TIMEOUT,

@@ -2,12 +2,12 @@ package com.transcriptionmodel.ideacapture
 
 import android.Manifest
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -38,6 +38,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,11 +55,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
+
+private val Context.notesDataStore by preferencesDataStore(name = "idea_capture_notes")
+private val notesJsonKey = stringPreferencesKey("notes_json")
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,13 +90,20 @@ fun IdeaCaptureApp() {
     MaterialTheme(colorScheme = lightColorScheme()) {
         Surface(modifier = Modifier.fillMaxSize()) {
             val context = LocalContext.current
+            val appContext = context.applicationContext
             var selectedTab by remember { mutableStateOf(AppTab.Capture) }
             val sessionState = remember { mutableStateOf(CaptureSession()) }
             var session by sessionState
-            var notes by remember { mutableStateOf(seedNotes()) }
+            var notes by remember { mutableStateOf(emptyList<Note>()) }
+            val coroutineScope = rememberCoroutineScope()
+
+            LaunchedEffect(appContext) {
+                notes = loadSavedNotes(appContext)
+            }
+
             val speechTranscriber = remember {
                 AndroidSpeechTranscriber(
-                    context = context.applicationContext,
+                    context = appContext,
                     onPartialTranscript = { partialTranscript ->
                         val currentSession = sessionState.value
                         if (currentSession.isRecording) {
@@ -113,6 +135,27 @@ fun IdeaCaptureApp() {
                 )
             }
 
+            fun startSpeechCapture() {
+                session = CaptureSession(
+                    status = CaptureStatus.Recording,
+                    startedAtMillis = System.currentTimeMillis(),
+                )
+                speechTranscriber.start()
+            }
+
+            val microphonePermissionLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestPermission(),
+            ) { isGranted ->
+                if (isGranted) {
+                    startSpeechCapture()
+                } else {
+                    session = CaptureSession(
+                        status = CaptureStatus.Failed,
+                        errorMessage = "Microphone permission is required. Grant it, then tap Start again.",
+                    )
+                }
+            }
+
             DisposableEffect(speechTranscriber) {
                 onDispose {
                     speechTranscriber.destroy()
@@ -139,25 +182,18 @@ fun IdeaCaptureApp() {
                         notesCount = notes.size,
                         modifier = Modifier.padding(innerPadding),
                         onStart = {
-                            if (!hasCapturePermissions(context)) {
-                                requestCapturePermissionsIfNeeded(context)
-                                session = CaptureSession(
-                                    status = CaptureStatus.Failed,
-                                    errorMessage = "Microphone permission is required. Grant it, then tap Start again.",
-                                )
+                            if (hasCapturePermissions(context)) {
+                                startSpeechCapture()
                             } else {
-                                session = CaptureSession(
-                                    status = CaptureStatus.Recording,
-                                    startedAtMillis = System.currentTimeMillis(),
-                                )
-                                speechTranscriber.start()
+                                microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                             }
                         },
                         onStop = {
-                            speechTranscriber.stop()
+                            val pendingTranscript = speechTranscriber.stopAndGetPendingTranscript()
                             val rawTranscript = appendTranscript(
                                 session.committedTranscript,
                                 session.partialTranscript,
+                                pendingTranscript,
                             ).ifBlank { "Quick idea captured from the prototype." }
                             val startedAt = session.startedAtMillis ?: System.currentTimeMillis()
                             val note = Note(
@@ -165,7 +201,11 @@ fun IdeaCaptureApp() {
                                 structured = structureTranscript(rawTranscript),
                                 durationMillis = System.currentTimeMillis() - startedAt,
                             )
-                            notes = listOf(note) + notes
+                            val updatedNotes = listOf(note) + notes
+                            notes = updatedNotes
+                            coroutineScope.launch {
+                                saveNotes(appContext, updatedNotes)
+                            }
                             session = CaptureSession(status = CaptureStatus.Structured)
                             selectedTab = AppTab.Inbox
                         },
@@ -348,40 +388,143 @@ private fun NoteCard(note: Note) {
     }
 }
 
-private fun requestCapturePermissionsIfNeeded(context: Context) {
-    if (context !is MainActivity) return
-
-    val permissions = capturePermissions()
-        .filter { permission -> context.checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED }
-
-    if (permissions.isNotEmpty()) {
-        context.requestPermissions(permissions.toTypedArray(), 42)
-    }
-}
-
 private fun hasCapturePermissions(context: Context): Boolean = capturePermissions()
     .all { permission -> context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED }
 
 private fun capturePermissions(): List<String> = listOf(Manifest.permission.RECORD_AUDIO)
 
-private fun appendTranscript(committed: String, partial: String): String =
-    listOf(committed, partial)
-        .filter { it.isNotBlank() }
-        .joinToString(" ")
-        .trim()
+private fun appendTranscript(vararg transcriptParts: String): String = transcriptParts
+    .map { it.trim() }
+    .filter { it.isNotBlank() }
+    .fold("") { transcript, nextPart ->
+        when {
+            transcript.isBlank() -> nextPart
+            transcript.endsWith(nextPart) -> transcript
+            nextPart.startsWith(transcript) -> nextPart
+            else -> "$transcript $nextPart"
+        }
+    }
 
-private fun seedNotes(): List<Note> {
-    val transcript = "Build an idea capture app that starts recording in one tap. Remember to keep the raw transcript separate from the structured summary."
-    return listOf(
-        Note(
-            rawTranscript = transcript,
-            structured = structureTranscript(transcript),
-            durationMillis = 18_000L,
-        ),
-    )
+private suspend fun loadSavedNotes(context: Context): List<Note> = try {
+    val notesJson = context.notesDataStore.data.first()[notesJsonKey].orEmpty()
+    if (notesJson.isBlank()) {
+        emptyList()
+    } else {
+        JSONArray(notesJson).toNotes().sortedByDescending { it.createdAtMillis }
+    }
+} catch (_: IOException) {
+    emptyList()
+} catch (_: RuntimeException) {
+    emptyList()
 }
 
+private suspend fun saveNotes(context: Context, notes: List<Note>) {
+    context.notesDataStore.edit { preferences ->
+        preferences[notesJsonKey] = notes.toJsonArray().toString()
+    }
+}
 
+private fun List<Note>.toJsonArray(): JSONArray = JSONArray().also { notesArray ->
+    forEach { note -> notesArray.put(note.toJsonObject()) }
+}
+
+private fun Note.toJsonObject(): JSONObject = JSONObject()
+    .put("id", id)
+    .put("rawTranscript", rawTranscript)
+    .put("createdAtMillis", createdAtMillis)
+    .put("durationMillis", durationMillis)
+    .put("structured", structured.toJsonObject())
+
+private fun StructuredNote.toJsonObject(): JSONObject = JSONObject()
+    .put("title", title)
+    .put("summary", summary)
+    .put("tags", JSONArray(tags))
+    .put("actionItems", actionItems.toJsonArray())
+
+private fun List<ActionItem>.toJsonArray(): JSONArray = JSONArray().also { actionItemsArray ->
+    forEach { actionItem -> actionItemsArray.put(actionItem.toJsonObject()) }
+}
+
+private fun ActionItem.toJsonObject(): JSONObject = JSONObject()
+    .put("id", id)
+    .put("text", text)
+    .put("done", done)
+
+private fun JSONArray.toNotes(): List<Note> = List(length()) { index ->
+    getJSONObject(index).toNote()
+}
+
+private fun JSONObject.toNote(): Note = Note(
+    id = optString("id", UUID.randomUUID().toString()),
+    rawTranscript = optString("rawTranscript"),
+    structured = optJSONObject("structured")?.toStructuredNote() ?: structureTranscript(optString("rawTranscript")),
+    createdAtMillis = optLong("createdAtMillis", System.currentTimeMillis()),
+    durationMillis = optLong("durationMillis"),
+)
+
+private fun JSONObject.toStructuredNote(): StructuredNote = StructuredNote(
+    title = optString("title", "Untitled idea"),
+    summary = optString("summary"),
+    tags = optJSONArray("tags")?.toStringList().orEmpty(),
+    actionItems = optJSONArray("actionItems")?.toActionItems().orEmpty(),
+)
+
+private fun JSONArray.toStringList(): List<String> = List(length()) { index -> getString(index) }
+
+private fun JSONArray.toActionItems(): List<ActionItem> = List(length()) { index ->
+    getJSONObject(index).toActionItem()
+}
+
+private fun JSONObject.toActionItem(): ActionItem = ActionItem(
+    id = optString("id", UUID.randomUUID().toString()),
+    text = optString("text"),
+    done = optBoolean("done", false),
+)
+
+private fun structureTranscript(rawTranscript: String): StructuredNote {
+    val cleanWords = rawTranscript
+        .split(' ', '\n', '\t')
+        .map { it.trim(',', '.', '!', '?', ':', ';', '"').lowercase() }
+        .filter { it.length > 3 }
+
+    val title = rawTranscript
+        .split('.', '!', '?')
+        .firstOrNull { it.isNotBlank() }
+        ?.trim()
+        ?.take(60)
+        ?.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+        ?: "Untitled idea"
+
+    val summary = when {
+        rawTranscript.length <= 180 -> rawTranscript
+        else -> rawTranscript.take(177).trimEnd() + "..."
+    }
+
+    val tags = cleanWords
+        .groupingBy { it }
+        .eachCount()
+        .entries
+        .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+        .map { it.key }
+        .filterNot { it in fillerWords }
+        .take(5)
+        .ifEmpty { listOf("idea") }
+
+    val actionItems = rawTranscript
+        .split('.', '!', '?')
+        .map { it.trim() }
+        .filter { sentence -> actionPrefixes.any { sentence.lowercase().startsWith(it) } }
+        .distinctBy { it.lowercase() }
+        .take(5)
+        .map { ActionItem(text = it) }
+
+    return StructuredNote(
+        title = title,
+        summary = summary,
+        tags = tags,
+        actionItems = actionItems,
+    )
+}
 
 private val fillerWords = setOf(
     "about",
