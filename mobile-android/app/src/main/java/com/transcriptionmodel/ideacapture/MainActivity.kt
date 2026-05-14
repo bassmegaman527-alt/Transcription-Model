@@ -45,6 +45,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -79,59 +85,6 @@ class MainActivity : ComponentActivity() {
 private enum class AppTab(val label: String) {
     Capture("Capture"),
     Inbox("Inbox"),
-}
-
-private enum class CaptureStatus {
-    Idle,
-    Recording,
-    Structured,
-    Failed,
-}
-
-private data class ActionItem(
-    val id: String = UUID.randomUUID().toString(),
-    val text: String,
-    val done: Boolean = false,
-)
-
-private data class StructuredNote(
-    val title: String,
-    val summary: String,
-    val tags: List<String>,
-    val actionItems: List<ActionItem>,
-)
-
-private data class Note(
-    val id: String = UUID.randomUUID().toString(),
-    val rawTranscript: String,
-    val structured: StructuredNote,
-    val createdAtMillis: Long = System.currentTimeMillis(),
-    val durationMillis: Long,
-) {
-    val displayTime: String
-        get() = timeFormatter.format(Date(createdAtMillis))
-
-    val durationSeconds: Long
-        get() = durationMillis.coerceAtLeast(0L) / 1_000L
-
-    private companion object {
-        val timeFormatter = SimpleDateFormat("MMM d, h:mm a", Locale.getDefault())
-    }
-}
-
-private data class CaptureSession(
-    val status: CaptureStatus = CaptureStatus.Idle,
-    val startedAtMillis: Long? = null,
-    val committedTranscript: String = "",
-    val partialTranscript: String = "",
-    val errorMessage: String? = null,
-) {
-    val isRecording: Boolean = status == CaptureStatus.Recording
-
-    val liveTranscript: String
-        get() = listOf(committedTranscript, partialTranscript)
-            .filter { it.isNotBlank() }
-            .joinToString(" ")
 }
 
 @Composable
@@ -289,7 +242,6 @@ fun IdeaCaptureApp() {
         }
     }
 }
-
 @Composable
 private fun CaptureScreen(
     session: CaptureSession,
@@ -651,9 +603,9 @@ private fun StructuredNote.toJsonObject(): JSONObject = JSONObject()
     .put("title", title)
     .put("summary", summary)
     .put("tags", JSONArray(tags))
-    .put("actionItems", actionItems.toJsonArray())
+    .put("actionItems", actionItems.toActionItemsJsonArray())
 
-private fun List<ActionItem>.toJsonArray(): JSONArray = JSONArray().also { actionItemsArray ->
+private fun List<ActionItem>.toActionItemsJsonArray(): JSONArray = JSONArray().also { actionItemsArray ->
     forEach { actionItem -> actionItemsArray.put(actionItem.toJsonObject()) }
 }
 
@@ -693,50 +645,6 @@ private fun JSONObject.toActionItem(): ActionItem = ActionItem(
     done = optBoolean("done", false),
 )
 
-private fun structureTranscript(rawTranscript: String): StructuredNote {
-    val cleanWords = rawTranscript
-        .split(' ', '\n', '\t')
-        .map { it.trim(',', '.', '!', '?', ':', ';', '"').lowercase() }
-        .filter { it.length > 3 }
-
-    val title = rawTranscript
-        .split('.', '!', '?')
-        .firstOrNull { it.isNotBlank() }
-        ?.trim()
-        ?.take(60)
-        ?.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
-        ?: "Untitled idea"
-
-    val summary = when {
-        rawTranscript.length <= 180 -> rawTranscript
-        else -> rawTranscript.take(177).trimEnd() + "..."
-    }
-
-    val tags = cleanWords
-        .groupingBy { it }
-        .eachCount()
-        .entries
-        .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
-        .map { it.key }
-        .filterNot { it in fillerWords }
-        .take(5)
-        .ifEmpty { listOf("idea") }
-
-    val actionItems = rawTranscript
-        .split('.', '!', '?')
-        .map { it.trim() }
-        .filter { sentence -> actionPrefixes.any { sentence.lowercase().startsWith(it) } }
-        .distinctBy { it.lowercase() }
-        .take(5)
-        .map { ActionItem(text = it) }
-
-    return StructuredNote(
-        title = title,
-        summary = summary,
-        tags = tags,
-        actionItems = actionItems,
-    )
-}
 
 private val fillerWords = setOf(
     "about",
