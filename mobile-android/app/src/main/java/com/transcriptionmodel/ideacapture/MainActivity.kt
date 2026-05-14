@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -217,6 +218,13 @@ fun IdeaCaptureApp() {
                         notes = notes,
                         searchQuery = inboxSearchQuery,
                         onSearchQueryChange = { inboxSearchQuery = it },
+                        onDeleteNote = { noteToDelete ->
+                            val updatedNotes = notes.filterNot { it.id == noteToDelete.id }
+                            notes = updatedNotes
+                            coroutineScope.launch {
+                                saveNotes(appContext, updatedNotes)
+                            }
+                        },
                         modifier = Modifier.padding(innerPadding),
                         onStartCapture = { selectedTab = AppTab.Capture },
                     )
@@ -318,6 +326,7 @@ private fun InboxScreen(
     notes: List<Note>,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
+    onDeleteNote: (Note) -> Unit,
     onStartCapture: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -372,15 +381,45 @@ private fun InboxScreen(
         }
 
         items(visibleNotes, key = { it.id }) { note ->
-            NoteCard(note = note)
+            NoteCard(
+                note = note,
+                onDeleteNote = onDeleteNote,
+            )
         }
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun NoteCard(note: Note) {
+private fun NoteCard(
+    note: Note,
+    onDeleteNote: (Note) -> Unit,
+) {
     var expanded by remember { mutableStateOf(false) }
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("Delete this note?") },
+            text = { Text("This removes the note from your Inbox on this device.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirmation = false
+                        onDeleteNote(note)
+                    },
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmation = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
 
     Card(modifier = Modifier.fillMaxWidth(), onClick = { expanded = !expanded }) {
         Column(modifier = Modifier.padding(18.dp)) {
@@ -407,6 +446,9 @@ private fun NoteCard(note: Note) {
                 TextButton(onClick = { expanded = false }) {
                     Text("Collapse")
                 }
+            }
+            TextButton(onClick = { showDeleteConfirmation = true }) {
+                Text("Delete")
             }
         }
     }
