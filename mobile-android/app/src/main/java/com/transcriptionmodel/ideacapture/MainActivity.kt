@@ -225,6 +225,15 @@ fun IdeaCaptureApp() {
                                 saveNotes(appContext, updatedNotes)
                             }
                         },
+                        onUpdateNote = { updatedNote ->
+                            val updatedNotes = notes.map { note ->
+                                if (note.id == updatedNote.id) updatedNote else note
+                            }
+                            notes = updatedNotes
+                            coroutineScope.launch {
+                                saveNotes(appContext, updatedNotes)
+                            }
+                        },
                         modifier = Modifier.padding(innerPadding),
                         onStartCapture = { selectedTab = AppTab.Capture },
                     )
@@ -327,6 +336,7 @@ private fun InboxScreen(
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     onDeleteNote: (Note) -> Unit,
+    onUpdateNote: (Note) -> Unit,
     onStartCapture: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -384,6 +394,7 @@ private fun InboxScreen(
             NoteCard(
                 note = note,
                 onDeleteNote = onDeleteNote,
+                onUpdateNote = onUpdateNote,
             )
         }
     }
@@ -394,9 +405,13 @@ private fun InboxScreen(
 private fun NoteCard(
     note: Note,
     onDeleteNote: (Note) -> Unit,
+    onUpdateNote: (Note) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
+    var showEditDialog by remember { mutableStateOf(false) }
+    var editableTitle by remember(note.id, note.structured.title) { mutableStateOf(note.structured.title) }
+    var editableRawTranscript by remember(note.id, note.rawTranscript) { mutableStateOf(note.rawTranscript) }
 
     if (showDeleteConfirmation) {
         AlertDialog(
@@ -415,6 +430,65 @@ private fun NoteCard(
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirmation = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    if (showEditDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                editableTitle = note.structured.title
+                editableRawTranscript = note.rawTranscript
+                showEditDialog = false
+            },
+            title = { Text("Edit note") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = editableTitle,
+                        onValueChange = { editableTitle = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("Title") },
+                    )
+                    OutlinedTextField(
+                        value = editableRawTranscript,
+                        onValueChange = { editableRawTranscript = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Raw transcript") },
+                        minLines = 4,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val cleanedTranscript = editableRawTranscript.trim()
+                        val regeneratedStructure = structureTranscript(cleanedTranscript)
+                        val updatedNote = note.copy(
+                            rawTranscript = cleanedTranscript,
+                            structured = regeneratedStructure.copy(
+                                title = editableTitle.trim().ifBlank { regeneratedStructure.title },
+                            ),
+                        )
+                        showEditDialog = false
+                        onUpdateNote(updatedNote)
+                    },
+                    enabled = editableRawTranscript.isNotBlank(),
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        editableTitle = note.structured.title
+                        editableRawTranscript = note.rawTranscript
+                        showEditDialog = false
+                    },
+                ) {
                     Text("Cancel")
                 }
             },
@@ -447,8 +521,13 @@ private fun NoteCard(
                     Text("Collapse")
                 }
             }
-            TextButton(onClick = { showDeleteConfirmation = true }) {
-                Text("Delete")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { showEditDialog = true }) {
+                    Text("Edit")
+                }
+                TextButton(onClick = { showDeleteConfirmation = true }) {
+                    Text("Delete")
+                }
             }
         }
     }
