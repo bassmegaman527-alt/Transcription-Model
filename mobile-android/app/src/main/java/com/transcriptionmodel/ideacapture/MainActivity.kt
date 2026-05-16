@@ -98,6 +98,7 @@ fun IdeaCaptureApp() {
             var session by sessionState
             var notes by remember { mutableStateOf(emptyList<Note>()) }
             var inboxSearchQuery by remember { mutableStateOf("") }
+            var isSavingCapture by remember { mutableStateOf(false) }
             val coroutineScope = rememberCoroutineScope()
 
             LaunchedEffect(appContext) {
@@ -139,6 +140,7 @@ fun IdeaCaptureApp() {
             }
 
             fun startSpeechCapture() {
+                isSavingCapture = false
                 session = CaptureSession(
                     status = CaptureStatus.Recording,
                     startedAtMillis = System.currentTimeMillis(),
@@ -192,25 +194,28 @@ fun IdeaCaptureApp() {
                             }
                         },
                         onStop = {
-                            val pendingTranscript = speechTranscriber.stopAndGetPendingTranscript()
-                            val rawTranscript = appendTranscript(
-                                session.committedTranscript,
-                                session.partialTranscript,
-                                pendingTranscript,
-                            ).ifBlank { "Quick idea captured from the prototype." }
-                            val startedAt = session.startedAtMillis ?: System.currentTimeMillis()
-                            val note = Note(
-                                rawTranscript = rawTranscript,
-                                structured = structureTranscript(rawTranscript),
-                                durationMillis = System.currentTimeMillis() - startedAt,
-                            )
-                            val updatedNotes = listOf(note) + notes
-                            notes = updatedNotes
-                            coroutineScope.launch {
-                                saveNotes(appContext, updatedNotes)
+                            if (!isSavingCapture && session.isRecording) {
+                                isSavingCapture = true
+                                val pendingTranscript = speechTranscriber.stopAndGetPendingTranscript()
+                                val rawTranscript = appendTranscript(
+                                    session.committedTranscript,
+                                    session.partialTranscript,
+                                    pendingTranscript,
+                                ).ifBlank { "Quick idea captured from the prototype." }
+                                val startedAt = session.startedAtMillis ?: System.currentTimeMillis()
+                                val note = Note(
+                                    rawTranscript = rawTranscript,
+                                    structured = structureTranscript(rawTranscript),
+                                    durationMillis = System.currentTimeMillis() - startedAt,
+                                )
+                                val updatedNotes = listOf(note) + notes
+                                notes = updatedNotes
+                                coroutineScope.launch {
+                                    saveNotes(appContext, updatedNotes)
+                                }
+                                session = CaptureSession(status = CaptureStatus.Structured)
+                                selectedTab = AppTab.Inbox
                             }
-                            session = CaptureSession(status = CaptureStatus.Structured)
-                            selectedTab = AppTab.Inbox
                         },
                     )
 
