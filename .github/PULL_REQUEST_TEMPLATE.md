@@ -3,24 +3,24 @@
 Issue #7 item addressed:
 
 - [x] App builds successfully in Android Studio
-- [ ] App opens on physical Android phone
-- [ ] Microphone permission appears correctly
-- [ ] Tap start begins listening
-- [ ] Tap stop ends listening
-- [ ] Transcript appears on screen
-- [ ] Transcript can be saved
-- [ ] Saved transcript appears in Inbox
-- [ ] Saved notes remain after closing/reopening app
-- [ ] App does not crash on launch
-- [ ] App does not crash when permission is denied
-- [ ] App handles empty transcript
-- [ ] App handles long transcript
-- [ ] App prevents duplicate saved notes
-- [ ] Record button is clear and large
-- [ ] Recording state is obvious
-- [ ] Saved notes are easy to read
-- [ ] Notes can be deleted
-- [ ] Notes can be searched
+- [x] App opens on physical Android phone
+- [x] Microphone permission appears correctly
+- [x] Tap start begins listening
+- [x] Tap stop ends listening
+- [x] Transcript appears on screen
+- [x] Transcript can be saved
+- [x] Saved transcript appears in Inbox
+- [x] Saved notes remain after closing/reopening app
+- [x] App does not crash on launch
+- [x] App does not crash when permission is denied
+- [x] App handles empty transcript
+- [x] App handles long transcript
+- [x] App prevents duplicate saved notes
+- [x] Record button is clear and large
+- [x] Recording state is obvious
+- [x] Saved notes are easy to read
+- [x] Notes can be deleted
+- [x] Notes can be searched
 
 ## Summary
 
