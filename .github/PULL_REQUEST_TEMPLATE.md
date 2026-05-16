@@ -2,7 +2,7 @@
 
 Issue #7 item addressed:
 
-- [ ] App builds successfully in Android Studio
+- [x] App builds successfully in Android Studio
 - [ ] App opens on physical Android phone
 - [ ] Microphone permission appears correctly
 - [ ] Tap start begins listening
