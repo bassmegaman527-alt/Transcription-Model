@@ -17,6 +17,7 @@ class AndroidSpeechTranscriber(
     private val onErrorMessage: (String) -> Unit,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val restartListeningRunnable = Runnable { startListening() }
     private var speechRecognizer: SpeechRecognizer? = null
     private var shouldKeepListening = false
     private var isStartPending = false
@@ -37,6 +38,7 @@ class AndroidSpeechTranscriber(
     fun stopAndGetPendingTranscript(): String {
         shouldKeepListening = false
         isStartPending = false
+        mainHandler.removeCallbacks(restartListeningRunnable)
         speechRecognizer?.stopListening()
         return latestPartialTranscript
     }
@@ -64,15 +66,19 @@ class AndroidSpeechTranscriber(
 
                 override fun onBufferReceived(buffer: ByteArray?) = Unit
 
-                override fun onEndOfSpeech() = Unit
+                override fun onEndOfSpeech() {
+                    scheduleRestartIfNeeded(END_OF_SPEECH_RESTART_DELAY_MS)
+                }
 
                 override fun onError(error: Int) {
+                    mainHandler.removeCallbacks(restartListeningRunnable)
                     isStartPending = false
                     onErrorMessage(error.toSpeechRecognizerMessage())
                     restartIfNeeded(error)
                 }
 
                 override fun onResults(results: Bundle?) {
+                    mainHandler.removeCallbacks(restartListeningRunnable)
                     isStartPending = false
                     latestPartialTranscript = ""
                     results?.bestRecognitionResult()?.let(onFinalTranscript)
@@ -105,10 +111,14 @@ class AndroidSpeechTranscriber(
             return
         }
 
-        mainHandler.postDelayed(
-            { startListening() },
-            RESTART_DELAY_MS,
-        )
+        scheduleRestartIfNeeded(RESTART_DELAY_MS)
+    }
+
+    private fun scheduleRestartIfNeeded(delayMillis: Long) {
+        if (!shouldKeepListening) return
+
+        mainHandler.removeCallbacks(restartListeningRunnable)
+        mainHandler.postDelayed(restartListeningRunnable, delayMillis)
     }
 
     private fun recognitionIntent(): Intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -127,7 +137,7 @@ class AndroidSpeechTranscriber(
 
     private fun Int.toSpeechRecognizerMessage(): String = when (this) {
         SpeechRecognizer.ERROR_AUDIO -> "Audio recording error. Please try again."
-        SpeechRecognizer.ERROR_CLIENT -> "Speech recognition stopped. Tap Start to try again."
+        SpeechRecognizer.ERROR_CLIENT -> "Speech recognition paused. Restarting."
         SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is required for speech recognition."
         SpeechRecognizer.ERROR_NETWORK -> "Network error during speech recognition."
         SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Speech recognition network timed out."
@@ -140,10 +150,12 @@ class AndroidSpeechTranscriber(
 
     private companion object {
         const val RESTART_DELAY_MS = 250L
+        const val END_OF_SPEECH_RESTART_DELAY_MS = 2_000L
         const val COMPLETE_SILENCE_MS = 1_500L
         const val POSSIBLY_COMPLETE_SILENCE_MS = 750L
 
         val recoverableErrors = setOf(
+            SpeechRecognizer.ERROR_CLIENT,
             SpeechRecognizer.ERROR_NETWORK_TIMEOUT,
             SpeechRecognizer.ERROR_NO_MATCH,
             SpeechRecognizer.ERROR_RECOGNIZER_BUSY,

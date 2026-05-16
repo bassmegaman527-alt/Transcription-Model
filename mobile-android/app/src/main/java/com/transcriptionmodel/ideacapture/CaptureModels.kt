@@ -66,13 +66,7 @@ fun structureTranscript(rawTranscript: String): StructuredNote {
         .map { it.trim(',', '.', '!', '?', ':', ';', '"').lowercase() }
         .filter { it.length > 3 }
 
-    val title = rawTranscript
-        .split('.', '!', '?')
-        .firstOrNull { it.isNotBlank() }
-        ?.trim()
-        ?.take(60)
-        ?.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
-        ?: "Untitled idea"
+    val title = rawTranscript.toMeaningfulTitle()
 
     val summary = when {
         rawTranscript.length <= 180 -> rawTranscript
@@ -105,6 +99,39 @@ fun structureTranscript(rawTranscript: String): StructuredNote {
     )
 }
 
+private fun String.toMeaningfulTitle(): String {
+    val normalizedTranscript = trim()
+    if (normalizedTranscript.isBlank() || normalizedTranscript.isGenericCaptureFallback()) {
+        return "Untitled idea"
+    }
+
+    val titleWords = normalizedTranscript
+        .splitToSequence(Regex("\\s+"))
+        .map { word -> word.trim(',', '.', '!', '?', ':', ';', '"', '“', '”', '(', ')') }
+        .filter { word -> word.isNotBlank() }
+        .filterNot { word -> word.lowercase(Locale.getDefault()) in titleFillerWords }
+        .take(MAX_TITLE_WORDS)
+        .toList()
+
+    val title = titleWords
+        .joinToString(" ")
+        .take(MAX_TITLE_LENGTH)
+        .trim()
+        .trim(',', '.', '!', '?', ':', ';', '-')
+
+    return title
+        .takeIf { it.isNotBlank() }
+        ?.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+        ?: "Untitled idea"
+}
+
+private fun String.isGenericCaptureFallback(): Boolean {
+    val normalized = lowercase(Locale.getDefault())
+        .trim(',', '.', '!', '?', ':', ';', '"')
+
+    return normalized in genericCaptureFallbacks
+}
+
 private val fillerWords = setOf(
     "about",
     "after",
@@ -115,6 +142,45 @@ private val fillerWords = setOf(
     "that",
     "this",
     "with",
+)
+
+private const val MAX_TITLE_WORDS = 6
+private const val MAX_TITLE_LENGTH = 60
+
+private val genericCaptureFallbacks = setOf(
+    "quick idea captured from the prototype",
+    "quick idea captured from prototype",
+)
+
+private val titleFillerWords = fillerWords + setOf(
+    "a",
+    "an",
+    "and",
+    "are",
+    "can",
+    "captured",
+    "for",
+    "from",
+    "have",
+    "i",
+    "idea",
+    "like",
+    "maybe",
+    "need",
+    "note",
+    "of",
+    "on",
+    "prototype",
+    "quick",
+    "recording",
+    "really",
+    "so",
+    "the",
+    "to",
+    "transcript",
+    "um",
+    "uh",
+    "we",
 )
 
 private val actionPrefixes = listOf(

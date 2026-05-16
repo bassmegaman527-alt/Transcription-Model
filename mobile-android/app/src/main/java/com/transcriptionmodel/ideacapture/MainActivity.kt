@@ -45,12 +45,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,9 +55,6 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import java.io.IOException
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import java.util.UUID
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -98,6 +89,7 @@ fun IdeaCaptureApp() {
             var session by sessionState
             var notes by remember { mutableStateOf(emptyList<Note>()) }
             var inboxSearchQuery by remember { mutableStateOf("") }
+            var isSavingCapture by remember { mutableStateOf(false) }
             val coroutineScope = rememberCoroutineScope()
 
             LaunchedEffect(appContext) {
@@ -139,6 +131,7 @@ fun IdeaCaptureApp() {
             }
 
             fun startSpeechCapture() {
+                isSavingCapture = false
                 session = CaptureSession(
                     status = CaptureStatus.Recording,
                     startedAtMillis = System.currentTimeMillis(),
@@ -192,25 +185,28 @@ fun IdeaCaptureApp() {
                             }
                         },
                         onStop = {
-                            val pendingTranscript = speechTranscriber.stopAndGetPendingTranscript()
-                            val rawTranscript = appendTranscript(
-                                session.committedTranscript,
-                                session.partialTranscript,
-                                pendingTranscript,
-                            ).ifBlank { "Quick idea captured from the prototype." }
-                            val startedAt = session.startedAtMillis ?: System.currentTimeMillis()
-                            val note = Note(
-                                rawTranscript = rawTranscript,
-                                structured = structureTranscript(rawTranscript),
-                                durationMillis = System.currentTimeMillis() - startedAt,
-                            )
-                            val updatedNotes = listOf(note) + notes
-                            notes = updatedNotes
-                            coroutineScope.launch {
-                                saveNotes(appContext, updatedNotes)
+                            if (!isSavingCapture && session.isRecording) {
+                                isSavingCapture = true
+                                val pendingTranscript = speechTranscriber.stopAndGetPendingTranscript()
+                                val rawTranscript = appendTranscript(
+                                    session.committedTranscript,
+                                    session.partialTranscript,
+                                    pendingTranscript,
+                                ).ifBlank { "Quick idea captured from the prototype." }
+                                val startedAt = session.startedAtMillis ?: System.currentTimeMillis()
+                                val note = Note(
+                                    rawTranscript = rawTranscript,
+                                    structured = structureTranscript(rawTranscript),
+                                    durationMillis = System.currentTimeMillis() - startedAt,
+                                )
+                                val updatedNotes = listOf(note) + notes
+                                notes = updatedNotes
+                                coroutineScope.launch {
+                                    saveNotes(appContext, updatedNotes)
+                                }
+                                session = CaptureSession(status = CaptureStatus.Structured)
+                                selectedTab = AppTab.Inbox
                             }
-                            session = CaptureSession(status = CaptureStatus.Structured)
-                            selectedTab = AppTab.Inbox
                         },
                     )
 
