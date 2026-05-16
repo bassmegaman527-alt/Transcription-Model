@@ -1,6 +1,6 @@
 # Transcription-Model
 
-Transcription-Model is a project concept for turning quick spoken thoughts into organized notes. The goal is to make it easy to capture an idea before it is forgotten, then review it later as a title, summary, tags, and possible action items.
+Transcription-Model is an Android-first idea capture app for turning quick spoken thoughts into organized notes. The goal is to make it easy to capture an idea before it is forgotten, then review it later as a title, summary, tags, raw transcript, and possible action items.
 
 ## Product goal
 
@@ -32,16 +32,28 @@ Each captured thought should eventually be represented with:
 - **Action items:** Optional tasks or follow-ups detected in the note.
 - **Created timestamp:** Recency information for Inbox sorting.
 
-## Future implementation ideas
+## Product documentation
 
-- Android prototype using platform speech recognition.
-- Local storage for saved notes.
-- Search and filtering across titles, summaries, transcripts, tags, and action items.
-- Edit and delete controls for Inbox notes.
-- Export or share support.
-- Optional cloud sync or backup.
-- More advanced AI-powered summarization and brainstorming assistance.
+- [SPEC-1: Idea Capture Transcription App](docs/SPEC-1-Idea-Capture-Transcription-App.md)
+- [Next Steps: Idea Capture Transcription App](docs/NEXT_STEPS.md)
 
-## Current repository state
+## Android prototype
 
-This repository currently contains project documentation only. Application source code, build configuration, automated tests, and runnable app instructions should be added in future implementation changes.
+The repository includes a native Kotlin Android prototype in [`mobile-android/app`](mobile-android/app). The prototype currently supports:
+
+- Jetpack Compose UI.
+- Capture and Inbox screens.
+- One-tap start/stop interaction.
+- Android speech recognition setup.
+- Local note structuring into title, summary, tags, and action items.
+- Local persistence for saved notes.
+- Recency-ordered note inbox.
+
+## Build
+
+Install Android Studio and the Android SDK, then open the project locally.
+
+From the repository root, run:
+
+```bash
+gradle :mobile-android:app:assembleDebug
