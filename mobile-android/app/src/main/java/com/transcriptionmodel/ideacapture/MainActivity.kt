@@ -288,15 +288,55 @@ fun IdeaCaptureApp() {
                         onStartCapture = { selectedTab = AppTab.Capture },
                     )
 
-                    AppTab.About -> AboutScreen(modifier = Modifier.padding(innerPadding))
+                    AppTab.About -> AboutScreen(
+                        onDeleteAllNotes = {
+                            notes = emptyList()
+                            coroutineScope.launch {
+                                saveNotes(appContext, emptyList())
+                            }
+                        },
+                        modifier = Modifier.padding(innerPadding),
+                    )
                 }
             }
+        }
+
+        item {
+            Text("Prototype version", style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
 
 @Composable
-private fun AboutScreen(modifier: Modifier = Modifier) {
+private fun AboutScreen(
+    onDeleteAllNotes: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var showDeleteAllConfirmation by remember { mutableStateOf(false) }
+
+    if (showDeleteAllConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteAllConfirmation = false },
+            title = { Text("Delete all notes?") },
+            text = { Text("This removes all saved notes from this device. This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteAllConfirmation = false
+                        onDeleteAllNotes()
+                    },
+                ) {
+                    Text("Delete all notes")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteAllConfirmation = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(24.dp),
@@ -331,6 +371,12 @@ private fun AboutScreen(modifier: Modifier = Modifier) {
 
         item {
             Text("Prototype version", style = MaterialTheme.typography.bodyMedium)
+        }
+
+        item {
+            OutlinedButton(onClick = { showDeleteAllConfirmation = true }) {
+                Text("Delete all notes")
+            }
         }
     }
 }
