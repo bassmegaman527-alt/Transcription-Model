@@ -301,19 +301,7 @@ fun IdeaCaptureApp() {
             }
         }
 
-        item {
-            Text("Prototype version", style = MaterialTheme.typography.bodyMedium)
-        }
-
-        item {
-            OutlinedButton(onClick = { showDeleteAllConfirmation = true }) {
-                Text("Delete all notes")
-            }
-        }
-    }
-}
-
-@Composable
+        @Composable
 private fun AboutScreen(
     onDeleteAllNotes: () -> Unit,
     modifier: Modifier = Modifier,
