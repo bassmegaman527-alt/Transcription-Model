@@ -2,6 +2,7 @@ package com.transcriptionmodel.ideacapture
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -55,6 +56,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import java.io.IOException
+import java.text.DateFormat
+import java.util.Date
 import java.util.UUID
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -90,6 +93,7 @@ fun IdeaCaptureApp() {
             var notes by remember { mutableStateOf(emptyList<Note>()) }
             var inboxSearchQuery by remember { mutableStateOf("") }
             var isSavingCapture by remember { mutableStateOf(false) }
+            var pendingEmptyCaptureDurationMillis by remember { mutableStateOf<Long?>(null) }
             val coroutineScope = rememberCoroutineScope()
 
             LaunchedEffect(appContext) {
@@ -132,11 +136,29 @@ fun IdeaCaptureApp() {
 
             fun startSpeechCapture() {
                 isSavingCapture = false
+                pendingEmptyCaptureDurationMillis = null
                 session = CaptureSession(
                     status = CaptureStatus.Recording,
                     startedAtMillis = System.currentTimeMillis(),
                 )
                 speechTranscriber.start()
+            }
+
+            fun saveCapture(transcript: String, durationMillis: Long) {
+                val note = Note(
+                    rawTranscript = transcript,
+                    structured = structureTranscript(transcript),
+                    durationMillis = durationMillis,
+                )
+                val updatedNotes = listOf(note) + notes
+                notes = updatedNotes
+                session = CaptureSession(status = CaptureStatus.Structuring)
+                coroutineScope.launch {
+                    saveNotes(appContext, updatedNotes)
+                    session = CaptureSession(status = CaptureStatus.Structured)
+                    selectedTab = AppTab.Inbox
+                }
+                pendingEmptyCaptureDurationMillis = null
             }
 
             val microphonePermissionLauncher = rememberLauncherForActivityResult(
@@ -156,6 +178,40 @@ fun IdeaCaptureApp() {
                 onDispose {
                     speechTranscriber.destroy()
                 }
+            }
+
+            pendingEmptyCaptureDurationMillis?.let { durationMillis ->
+                AlertDialog(
+                    onDismissRequest = {},
+                    title = { Text("No speech captured") },
+                    text = {
+                        Text("No speech was captured. Do you want to save an empty note or discard this capture?")
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                if (pendingEmptyCaptureDurationMillis != null) {
+                                    pendingEmptyCaptureDurationMillis = null
+                                    saveCapture(transcript = "", durationMillis = durationMillis)
+                                }
+                            },
+                        ) {
+                            Text("Save empty note")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = {
+                                pendingEmptyCaptureDurationMillis = null
+                                isSavingCapture = false
+                                session = CaptureSession()
+                                selectedTab = AppTab.Capture
+                            },
+                        ) {
+                            Text("Discard")
+                        }
+                    },
+                )
             }
 
             Scaffold(
@@ -192,20 +248,18 @@ fun IdeaCaptureApp() {
                                     session.committedTranscript,
                                     session.partialTranscript,
                                     pendingTranscript,
-                                ).ifBlank { "Quick idea captured from the prototype." }
-                                val startedAt = session.startedAtMillis ?: System.currentTimeMillis()
-                                val note = Note(
-                                    rawTranscript = rawTranscript,
-                                    structured = structureTranscript(rawTranscript),
-                                    durationMillis = System.currentTimeMillis() - startedAt,
                                 )
-                                val updatedNotes = listOf(note) + notes
-                                notes = updatedNotes
-                                coroutineScope.launch {
-                                    saveNotes(appContext, updatedNotes)
+                                val startedAt = session.startedAtMillis ?: System.currentTimeMillis()
+                                val durationMillis = System.currentTimeMillis() - startedAt
+                                if (rawTranscript.isBlank()) {
+                                    session = session.copy(
+                                        status = CaptureStatus.AwaitingConfirmation,
+                                        partialTranscript = "",
+                                    )
+                                    pendingEmptyCaptureDurationMillis = durationMillis
+                                } else {
+                                    saveCapture(rawTranscript, durationMillis)
                                 }
-                                session = CaptureSession(status = CaptureStatus.Structured)
-                                selectedTab = AppTab.Inbox
                             }
                         },
                     )
@@ -273,10 +327,12 @@ private fun CaptureScreen(
                 ) {
                     Text(
                         text = when (session.status) {
-                            CaptureStatus.Recording -> "Recording live"
-                            CaptureStatus.Structured -> "Last capture saved"
-                            CaptureStatus.Failed -> "Speech recognition needs attention"
-                            else -> "Ready to capture"
+                            CaptureStatus.Idle -> "Ready to capture your idea."
+                            CaptureStatus.Recording -> "Listening..."
+                            CaptureStatus.Saved, CaptureStatus.Structured -> "Saved to Inbox."
+                            CaptureStatus.Structuring -> "Saving your note..."
+                            CaptureStatus.AwaitingConfirmation -> "No speech was captured."
+                            CaptureStatus.Failed -> session.errorMessage ?: "Speech recognition failed."
                         },
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold,
@@ -403,6 +459,7 @@ private fun NoteCard(
     onDeleteNote: (Note) -> Unit,
     onUpdateNote: (Note) -> Unit,
 ) {
+    val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
@@ -513,8 +570,13 @@ private fun NoteCard(
                     Text("Action items", fontWeight = FontWeight.SemiBold)
                     note.structured.actionItems.forEach { item -> Text("• ${item.text}") }
                 }
-                TextButton(onClick = { expanded = false }) {
-                    Text("Collapse")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { shareNote(context, note) }) {
+                        Text("Share")
+                    }
+                    TextButton(onClick = { expanded = false }) {
+                        Text("Collapse")
+                    }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -527,6 +589,27 @@ private fun NoteCard(
             }
         }
     }
+}
+
+private fun shareNote(context: Context, note: Note) {
+    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, note.structured.title)
+        putExtra(Intent.EXTRA_TEXT, note.toShareText())
+    }
+    context.startActivity(Intent.createChooser(shareIntent, "Share note"))
+}
+
+private fun Note.toShareText(): String = buildString {
+    appendLine("Title: ${structured.title}")
+    appendLine("Summary: ${structured.summary}")
+    appendLine("Tags: ${structured.tags.joinToString(", ")}")
+    if (structured.actionItems.isNotEmpty()) {
+        appendLine("Action items:")
+        structured.actionItems.forEach { actionItem -> appendLine("- ${actionItem.text}") }
+    }
+    appendLine("Raw transcript: $rawTranscript")
+    append("Created: ${DateFormat.getDateTimeInstance().format(Date(createdAtMillis))}")
 }
 
 private fun List<Note>.filterBySearchQuery(query: String): List<Note> {
