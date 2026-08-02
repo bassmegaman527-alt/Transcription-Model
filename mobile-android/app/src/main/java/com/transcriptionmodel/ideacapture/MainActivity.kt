@@ -298,14 +298,10 @@ fun IdeaCaptureApp() {
                         modifier = Modifier.padding(innerPadding),
                     )
                 }
-            }
-        }
-
-        item {
-            Text("Prototype version", style = MaterialTheme.typography.bodyMedium)
-        }
-    }
-}
+            } // Scaffold
+        } // Surface
+    } // MaterialTheme
+} // IdeaCaptureApp
 
 @Composable
 private fun AboutScreen(
@@ -366,6 +362,16 @@ private fun AboutScreen(
                     Text("• The app does not intentionally store audio recordings.")
                     Text("• Speech recognition depends on Android SpeechRecognizer.")
                 }
+            }
+        }
+
+        item {
+            Text("Prototype version", style = MaterialTheme.typography.bodyMedium)
+        }
+
+        item {
+            OutlinedButton(onClick = { showDeleteAllConfirmation = true }) {
+                Text("Delete all notes")
             }
         }
 
