@@ -8,6 +8,7 @@ import java.util.UUID
 enum class CaptureStatus {
     Idle,
     Recording,
+    AwaitingConfirmation,
     Saved,
     Structuring,
     Structured,
