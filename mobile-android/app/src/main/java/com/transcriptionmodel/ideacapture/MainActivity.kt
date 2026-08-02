@@ -152,13 +152,12 @@ fun IdeaCaptureApp() {
                 )
                 val updatedNotes = listOf(note) + notes
                 notes = updatedNotes
-                session = CaptureSession(status = CaptureStatus.Structuring)
                 coroutineScope.launch {
                     saveNotes(appContext, updatedNotes)
-                    session = CaptureSession(status = CaptureStatus.Structured)
-                    selectedTab = AppTab.Inbox
                 }
                 pendingEmptyCaptureDurationMillis = null
+                session = CaptureSession(status = CaptureStatus.Structured)
+                selectedTab = AppTab.Inbox
             }
 
             val microphonePermissionLauncher = rememberLauncherForActivityResult(
