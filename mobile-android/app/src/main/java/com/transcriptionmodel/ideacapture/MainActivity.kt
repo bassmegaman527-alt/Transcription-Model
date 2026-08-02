@@ -2,6 +2,7 @@ package com.transcriptionmodel.ideacapture
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -55,6 +56,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import java.io.IOException
+import java.text.DateFormat
+import java.util.Date
 import java.util.UUID
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -455,6 +458,7 @@ private fun NoteCard(
     onDeleteNote: (Note) -> Unit,
     onUpdateNote: (Note) -> Unit,
 ) {
+    val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
@@ -565,8 +569,13 @@ private fun NoteCard(
                     Text("Action items", fontWeight = FontWeight.SemiBold)
                     note.structured.actionItems.forEach { item -> Text("• ${item.text}") }
                 }
-                TextButton(onClick = { expanded = false }) {
-                    Text("Collapse")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { shareNote(context, note) }) {
+                        Text("Share")
+                    }
+                    TextButton(onClick = { expanded = false }) {
+                        Text("Collapse")
+                    }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -579,6 +588,27 @@ private fun NoteCard(
             }
         }
     }
+}
+
+private fun shareNote(context: Context, note: Note) {
+    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, note.structured.title)
+        putExtra(Intent.EXTRA_TEXT, note.toShareText())
+    }
+    context.startActivity(Intent.createChooser(shareIntent, "Share note"))
+}
+
+private fun Note.toShareText(): String = buildString {
+    appendLine("Title: ${structured.title}")
+    appendLine("Summary: ${structured.summary}")
+    appendLine("Tags: ${structured.tags.joinToString(", ")}")
+    if (structured.actionItems.isNotEmpty()) {
+        appendLine("Action items:")
+        structured.actionItems.forEach { actionItem -> appendLine("- ${actionItem.text}") }
+    }
+    appendLine("Raw transcript: $rawTranscript")
+    append("Created: ${DateFormat.getDateTimeInstance().format(Date(createdAtMillis))}")
 }
 
 private fun List<Note>.filterBySearchQuery(query: String): List<Note> {
