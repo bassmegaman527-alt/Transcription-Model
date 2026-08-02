@@ -153,13 +153,12 @@ fun IdeaCaptureApp() {
                 )
                 val updatedNotes = listOf(note) + notes
                 notes = updatedNotes
-                session = CaptureSession(status = CaptureStatus.Structuring)
                 coroutineScope.launch {
                     saveNotes(appContext, updatedNotes)
-                    session = CaptureSession(status = CaptureStatus.Structured)
-                    selectedTab = AppTab.Inbox
                 }
                 pendingEmptyCaptureDurationMillis = null
+                session = CaptureSession(status = CaptureStatus.Structured)
+                selectedTab = AppTab.Inbox
             }
 
             val microphonePermissionLauncher = rememberLauncherForActivityResult(
@@ -367,6 +366,90 @@ private fun AboutScreen(
                     Text("• The app does not intentionally store audio recordings.")
                     Text("• Speech recognition depends on Android SpeechRecognizer.")
                 }
+            } // Scaffold
+        } // Surface
+    } // MaterialTheme
+} // IdeaCaptureApp
+
+@Composable
+private fun AboutScreen(
+    onDeleteAllNotes: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var showDeleteAllConfirmation by remember { mutableStateOf(false) }
+
+    if (showDeleteAllConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteAllConfirmation = false },
+            title = { Text("Delete all notes?") },
+            text = { Text("This removes all saved notes from this device. This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteAllConfirmation = false
+                        onDeleteAllNotes()
+                    },
+                ) {
+                    Text("Delete all notes")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteAllConfirmation = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(24.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
+        item {
+            Text(
+                text = "Idea Capture",
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = "Capture spoken ideas and turn them into organized notes you can review and share.",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+        }
+
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("Privacy", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    Text("• Notes are stored locally on this device.")
+                    Text("• The app stores transcript and note text.")
+                    Text("• The app does not intentionally store audio recordings.")
+                    Text("• Speech recognition depends on Android SpeechRecognizer.")
+                }
+            }
+        }
+
+        item {
+            Text("Prototype version", style = MaterialTheme.typography.bodyMedium)
+        }
+
+        item {
+            OutlinedButton(onClick = { showDeleteAllConfirmation = true }) {
+                Text("Delete all notes")
+            }
+        }
+
+        item {
+            Text("Prototype version", style = MaterialTheme.typography.bodyMedium)
+        }
+
+        item {
+            OutlinedButton(onClick = { showDeleteAllConfirmation = true }) {
+                Text("Delete all notes")
             }
         }
 
