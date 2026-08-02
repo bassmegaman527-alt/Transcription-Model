@@ -153,13 +153,12 @@ fun IdeaCaptureApp() {
                 )
                 val updatedNotes = listOf(note) + notes
                 notes = updatedNotes
-                session = CaptureSession(status = CaptureStatus.Structuring)
                 coroutineScope.launch {
                     saveNotes(appContext, updatedNotes)
-                    session = CaptureSession(status = CaptureStatus.Structured)
-                    selectedTab = AppTab.Inbox
                 }
                 pendingEmptyCaptureDurationMillis = null
+                session = CaptureSession(status = CaptureStatus.Structured)
+                selectedTab = AppTab.Inbox
             }
 
             val microphonePermissionLauncher = rememberLauncherForActivityResult(
@@ -363,6 +362,16 @@ private fun AboutScreen(
                     Text("• The app does not intentionally store audio recordings.")
                     Text("• Speech recognition depends on Android SpeechRecognizer.")
                 }
+            }
+        }
+
+        item {
+            Text("Prototype version", style = MaterialTheme.typography.bodyMedium)
+        }
+
+        item {
+            OutlinedButton(onClick = { showDeleteAllConfirmation = true }) {
+                Text("Delete all notes")
             }
         }
 
