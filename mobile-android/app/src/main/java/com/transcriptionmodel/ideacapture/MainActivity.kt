@@ -249,7 +249,7 @@ fun IdeaCaptureApp() {
                                 val durationMillis = System.currentTimeMillis() - startedAt
                                 if (rawTranscript.isBlank()) {
                                     session = session.copy(
-                                        status = CaptureStatus.Structuring,
+                                        status = CaptureStatus.AwaitingConfirmation,
                                         partialTranscript = "",
                                     )
                                     pendingEmptyCaptureDurationMillis = durationMillis
@@ -323,10 +323,12 @@ private fun CaptureScreen(
                 ) {
                     Text(
                         text = when (session.status) {
-                            CaptureStatus.Recording -> "Recording live"
-                            CaptureStatus.Structured -> "Last capture saved"
-                            CaptureStatus.Failed -> "Speech recognition needs attention"
-                            else -> "Ready to capture"
+                            CaptureStatus.Idle -> "Ready to capture your idea."
+                            CaptureStatus.Recording -> "Listening..."
+                            CaptureStatus.Saved, CaptureStatus.Structured -> "Saved to Inbox."
+                            CaptureStatus.Structuring -> "Saving your note..."
+                            CaptureStatus.AwaitingConfirmation -> "No speech was captured."
+                            CaptureStatus.Failed -> session.errorMessage ?: "Speech recognition failed."
                         },
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold,
