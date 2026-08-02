@@ -243,22 +243,26 @@ fun IdeaCaptureApp() {
                         onStop = {
                             if (!isSavingCapture && session.isRecording) {
                                 isSavingCapture = true
-                                val pendingTranscript = speechTranscriber.stopAndGetPendingTranscript()
-                                val rawTranscript = appendTranscript(
-                                    session.committedTranscript,
-                                    session.partialTranscript,
-                                    pendingTranscript,
-                                )
+                                val committedTranscript = session.committedTranscript
+                                val partialTranscript = session.partialTranscript
                                 val startedAt = session.startedAtMillis ?: System.currentTimeMillis()
                                 val durationMillis = System.currentTimeMillis() - startedAt
-                                if (rawTranscript.isBlank()) {
-                                    session = session.copy(
-                                        status = CaptureStatus.AwaitingConfirmation,
-                                        partialTranscript = "",
+                                session = session.copy(
+                                    status = CaptureStatus.Structuring,
+                                    partialTranscript = "",
+                                )
+                                speechTranscriber.stopAndGetPendingTranscript { pendingTranscript ->
+                                    val rawTranscript = appendTranscript(
+                                        committedTranscript,
+                                        partialTranscript,
+                                        pendingTranscript,
                                     )
-                                    pendingEmptyCaptureDurationMillis = durationMillis
-                                } else {
-                                    saveCapture(rawTranscript, durationMillis)
+                                    if (rawTranscript.isBlank()) {
+                                        session = session.copy(status = CaptureStatus.AwaitingConfirmation)
+                                        pendingEmptyCaptureDurationMillis = durationMillis
+                                    } else {
+                                        saveCapture(rawTranscript, durationMillis)
+                                    }
                                 }
                             }
                         },
@@ -362,6 +366,80 @@ private fun AboutScreen(
                     Text("• The app does not intentionally store audio recordings.")
                     Text("• Speech recognition depends on Android SpeechRecognizer.")
                 }
+            } // Scaffold
+        } // Surface
+    } // MaterialTheme
+} // IdeaCaptureApp
+
+@Composable
+private fun AboutScreen(
+    onDeleteAllNotes: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var showDeleteAllConfirmation by remember { mutableStateOf(false) }
+
+    if (showDeleteAllConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteAllConfirmation = false },
+            title = { Text("Delete all notes?") },
+            text = { Text("This removes all saved notes from this device. This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteAllConfirmation = false
+                        onDeleteAllNotes()
+                    },
+                ) {
+                    Text("Delete all notes")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteAllConfirmation = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(24.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
+        item {
+            Text(
+                text = "Idea Capture",
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = "Capture spoken ideas and turn them into organized notes you can review and share.",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+        }
+
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("Privacy", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    Text("• Notes are stored locally on this device.")
+                    Text("• The app stores transcript and note text.")
+                    Text("• The app does not intentionally store audio recordings.")
+                    Text("• Speech recognition depends on Android SpeechRecognizer.")
+                }
+            }
+        }
+
+        item {
+            Text("Prototype version", style = MaterialTheme.typography.bodyMedium)
+        }
+
+        item {
+            OutlinedButton(onClick = { showDeleteAllConfirmation = true }) {
+                Text("Delete all notes")
             }
         }
 
@@ -435,6 +513,7 @@ private fun CaptureScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
                         onClick = if (session.isRecording) onStop else onStart,
+                        enabled = session.status != CaptureStatus.Structuring,
                         shape = CircleShape,
                         contentPadding = PaddingValues(horizontal = 42.dp, vertical = 28.dp),
                     ) {

@@ -18,10 +18,12 @@ class AndroidSpeechTranscriber(
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val restartListeningRunnable = Runnable { startListening() }
+    private val stopResultTimeoutRunnable = Runnable { completePendingStop("") }
     private var speechRecognizer: SpeechRecognizer? = null
     private var shouldKeepListening = false
     private var isStartPending = false
     private var latestPartialTranscript = ""
+    private var pendingStopCallback: ((String) -> Unit)? = null
 
     fun start() {
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
@@ -35,17 +37,20 @@ class AndroidSpeechTranscriber(
         startListening()
     }
 
-    fun stopAndGetPendingTranscript(): String {
+    fun stopAndGetPendingTranscript(onTranscriptReady: (String) -> Unit) {
         shouldKeepListening = false
         isStartPending = false
         mainHandler.removeCallbacks(restartListeningRunnable)
+        mainHandler.removeCallbacks(stopResultTimeoutRunnable)
+        pendingStopCallback = onTranscriptReady
         speechRecognizer?.stopListening()
-        return latestPartialTranscript
+        mainHandler.postDelayed(stopResultTimeoutRunnable, STOP_RESULT_TIMEOUT_MS)
     }
 
     fun destroy() {
         shouldKeepListening = false
         isStartPending = false
+        pendingStopCallback = null
         speechRecognizer?.destroy()
         speechRecognizer = null
         mainHandler.removeCallbacksAndMessages(null)
@@ -74,14 +79,23 @@ class AndroidSpeechTranscriber(
                     mainHandler.removeCallbacks(restartListeningRunnable)
                     isStartPending = false
                     onErrorMessage(error.toSpeechRecognizerMessage())
+                    if (pendingStopCallback != null) {
+                        completePendingStop("")
+                        return
+                    }
                     restartIfNeeded(error)
                 }
 
                 override fun onResults(results: Bundle?) {
                     mainHandler.removeCallbacks(restartListeningRunnable)
                     isStartPending = false
+                    val finalTranscript = results?.bestRecognitionResult().orEmpty()
+                    finalTranscript.takeIf { it.isNotBlank() }?.let(onFinalTranscript)
+                    if (pendingStopCallback != null) {
+                        completePendingStop(finalTranscript)
+                        return
+                    }
                     latestPartialTranscript = ""
-                    results?.bestRecognitionResult()?.let(onFinalTranscript)
                     restartIfNeeded()
                 }
 
@@ -102,6 +116,15 @@ class AndroidSpeechTranscriber(
 
         isStartPending = true
         speechRecognizer?.startListening(recognitionIntent())
+    }
+
+    private fun completePendingStop(finalTranscript: String) {
+        val callback = pendingStopCallback ?: return
+        pendingStopCallback = null
+        mainHandler.removeCallbacks(stopResultTimeoutRunnable)
+        val stoppedTranscript = finalTranscript.ifBlank { latestPartialTranscript }
+        latestPartialTranscript = ""
+        callback(stoppedTranscript)
     }
 
     private fun restartIfNeeded(error: Int? = null) {
@@ -153,6 +176,7 @@ class AndroidSpeechTranscriber(
         const val END_OF_SPEECH_RESTART_DELAY_MS = 2_000L
         const val COMPLETE_SILENCE_MS = 1_500L
         const val POSSIBLY_COMPLETE_SILENCE_MS = 750L
+        const val STOP_RESULT_TIMEOUT_MS = 1_500L
 
         val recoverableErrors = setOf(
             SpeechRecognizer.ERROR_CLIENT,
