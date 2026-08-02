@@ -76,9 +76,10 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class AppTab(val label: String) {
-    Capture("Capture"),
-    Inbox("Inbox"),
+private enum class AppTab(val label: String, val icon: String) {
+    Capture("Capture", "🎙️"),
+    Inbox("Inbox", "🗂️"),
+    About("About", "ℹ️"),
 }
 
 @Composable
@@ -221,7 +222,7 @@ fun IdeaCaptureApp() {
                                 selected = selectedTab == tab,
                                 onClick = { selectedTab = tab },
                                 label = { Text(tab.label) },
-                                icon = { Text(if (tab == AppTab.Capture) "🎙️" else "🗂️") },
+                                icon = { Text(tab.icon) },
                             )
                         }
                     }
@@ -286,11 +287,54 @@ fun IdeaCaptureApp() {
                         modifier = Modifier.padding(innerPadding),
                         onStartCapture = { selectedTab = AppTab.Capture },
                     )
+
+                    AppTab.About -> AboutScreen(modifier = Modifier.padding(innerPadding))
                 }
             }
         }
     }
 }
+
+@Composable
+private fun AboutScreen(modifier: Modifier = Modifier) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(24.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
+        item {
+            Text(
+                text = "Idea Capture",
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = "Capture spoken ideas and turn them into organized notes you can review and share.",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+        }
+
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("Privacy", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    Text("• Notes are stored locally on this device.")
+                    Text("• The app stores transcript and note text.")
+                    Text("• The app does not intentionally store audio recordings.")
+                    Text("• Speech recognition depends on Android SpeechRecognizer.")
+                }
+            }
+        }
+
+        item {
+            Text("Prototype version", style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
 @Composable
 private fun CaptureScreen(
     session: CaptureSession,
