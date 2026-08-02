@@ -90,6 +90,7 @@ fun IdeaCaptureApp() {
             var notes by remember { mutableStateOf(emptyList<Note>()) }
             var inboxSearchQuery by remember { mutableStateOf("") }
             var isSavingCapture by remember { mutableStateOf(false) }
+            var pendingEmptyCaptureDurationMillis by remember { mutableStateOf<Long?>(null) }
             val coroutineScope = rememberCoroutineScope()
 
             LaunchedEffect(appContext) {
@@ -132,11 +133,29 @@ fun IdeaCaptureApp() {
 
             fun startSpeechCapture() {
                 isSavingCapture = false
+                pendingEmptyCaptureDurationMillis = null
                 session = CaptureSession(
                     status = CaptureStatus.Recording,
                     startedAtMillis = System.currentTimeMillis(),
                 )
                 speechTranscriber.start()
+            }
+
+            fun saveCapture(transcript: String, durationMillis: Long) {
+                val note = Note(
+                    rawTranscript = transcript,
+                    structured = structureTranscript(transcript),
+                    durationMillis = durationMillis,
+                )
+                val updatedNotes = listOf(note) + notes
+                notes = updatedNotes
+                session = CaptureSession(status = CaptureStatus.Structuring)
+                coroutineScope.launch {
+                    saveNotes(appContext, updatedNotes)
+                    session = CaptureSession(status = CaptureStatus.Structured)
+                    selectedTab = AppTab.Inbox
+                }
+                pendingEmptyCaptureDurationMillis = null
             }
 
             val microphonePermissionLauncher = rememberLauncherForActivityResult(
@@ -156,6 +175,40 @@ fun IdeaCaptureApp() {
                 onDispose {
                     speechTranscriber.destroy()
                 }
+            }
+
+            pendingEmptyCaptureDurationMillis?.let { durationMillis ->
+                AlertDialog(
+                    onDismissRequest = {},
+                    title = { Text("No speech captured") },
+                    text = {
+                        Text("No speech was captured. Do you want to save an empty note or discard this capture?")
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                if (pendingEmptyCaptureDurationMillis != null) {
+                                    pendingEmptyCaptureDurationMillis = null
+                                    saveCapture(transcript = "", durationMillis = durationMillis)
+                                }
+                            },
+                        ) {
+                            Text("Save empty note")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = {
+                                pendingEmptyCaptureDurationMillis = null
+                                isSavingCapture = false
+                                session = CaptureSession()
+                                selectedTab = AppTab.Capture
+                            },
+                        ) {
+                            Text("Discard")
+                        }
+                    },
+                )
             }
 
             Scaffold(
@@ -192,20 +245,18 @@ fun IdeaCaptureApp() {
                                     session.committedTranscript,
                                     session.partialTranscript,
                                     pendingTranscript,
-                                ).ifBlank { "Quick idea captured from the prototype." }
-                                val startedAt = session.startedAtMillis ?: System.currentTimeMillis()
-                                val note = Note(
-                                    rawTranscript = rawTranscript,
-                                    structured = structureTranscript(rawTranscript),
-                                    durationMillis = System.currentTimeMillis() - startedAt,
                                 )
-                                val updatedNotes = listOf(note) + notes
-                                notes = updatedNotes
-                                coroutineScope.launch {
-                                    saveNotes(appContext, updatedNotes)
+                                val startedAt = session.startedAtMillis ?: System.currentTimeMillis()
+                                val durationMillis = System.currentTimeMillis() - startedAt
+                                if (rawTranscript.isBlank()) {
+                                    session = session.copy(
+                                        status = CaptureStatus.AwaitingConfirmation,
+                                        partialTranscript = "",
+                                    )
+                                    pendingEmptyCaptureDurationMillis = durationMillis
+                                } else {
+                                    saveCapture(rawTranscript, durationMillis)
                                 }
-                                session = CaptureSession(status = CaptureStatus.Structured)
-                                selectedTab = AppTab.Inbox
                             }
                         },
                     )
@@ -273,10 +324,12 @@ private fun CaptureScreen(
                 ) {
                     Text(
                         text = when (session.status) {
-                            CaptureStatus.Recording -> "Recording live"
-                            CaptureStatus.Structured -> "Last capture saved"
-                            CaptureStatus.Failed -> "Speech recognition needs attention"
-                            else -> "Ready to capture"
+                            CaptureStatus.Idle -> "Ready to capture your idea."
+                            CaptureStatus.Recording -> "Listening..."
+                            CaptureStatus.Saved, CaptureStatus.Structured -> "Saved to Inbox."
+                            CaptureStatus.Structuring -> "Saving your note..."
+                            CaptureStatus.AwaitingConfirmation -> "No speech was captured."
+                            CaptureStatus.Failed -> session.errorMessage ?: "Speech recognition failed."
                         },
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold,
