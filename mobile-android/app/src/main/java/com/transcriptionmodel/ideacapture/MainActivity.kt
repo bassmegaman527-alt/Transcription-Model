@@ -153,13 +153,12 @@ fun IdeaCaptureApp() {
                 )
                 val updatedNotes = listOf(note) + notes
                 notes = updatedNotes
-                session = CaptureSession(status = CaptureStatus.Structuring)
                 coroutineScope.launch {
                     saveNotes(appContext, updatedNotes)
-                    session = CaptureSession(status = CaptureStatus.Structured)
-                    selectedTab = AppTab.Inbox
                 }
                 pendingEmptyCaptureDurationMillis = null
+                session = CaptureSession(status = CaptureStatus.Structured)
+                selectedTab = AppTab.Inbox
             }
 
             val microphonePermissionLauncher = rememberLauncherForActivityResult(
@@ -433,16 +432,6 @@ private fun AboutScreen(
                 }
             }
         }
-        item {
-            Text("Prototype version", style = MaterialTheme.typography.bodyMedium)
-        }
-
-        item {
-            OutlinedButton(onClick = { showDeleteAllConfirmation = true }) {
-                Text("Delete all notes")
-            }
-        }
-
         item {
             Text("Prototype version", style = MaterialTheme.typography.bodyMedium)
         }
@@ -886,4 +875,29 @@ private fun JSONObject.toActionItem(): ActionItem = ActionItem(
     id = optString("id", UUID.randomUUID().toString()),
     text = optString("text"),
     done = optBoolean("done", false),
+)
+
+
+private val fillerWords = setOf(
+    "about",
+    "after",
+    "again",
+    "because",
+    "could",
+    "should",
+    "that",
+    "this",
+    "with",
+)
+
+private val actionPrefixes = listOf(
+    "i need to",
+    "need to",
+    "todo",
+    "to do",
+    "remember to",
+    "follow up",
+    "create",
+    "build",
+    "write",
 )
