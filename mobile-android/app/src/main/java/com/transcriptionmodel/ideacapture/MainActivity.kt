@@ -432,27 +432,6 @@ private fun AboutScreen(
                 }
             }
         }
-
-        item {
-            Text("Prototype version", style = MaterialTheme.typography.bodyMedium)
-        }
-
-        item {
-            OutlinedButton(onClick = { showDeleteAllConfirmation = true }) {
-                Text("Delete all notes")
-            }
-        }
-
-        item {
-            Text("Prototype version", style = MaterialTheme.typography.bodyMedium)
-        }
-
-        item {
-            OutlinedButton(onClick = { showDeleteAllConfirmation = true }) {
-                Text("Delete all notes")
-            }
-        }
-
         item {
             Text("Prototype version", style = MaterialTheme.typography.bodyMedium)
         }
