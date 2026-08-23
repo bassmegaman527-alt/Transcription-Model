@@ -1,0 +1,7 @@
+interface:
+  display_name: "Transcription Feature Implementer"
+  short_description: "Build focused Android features with minimal churn"
+  default_prompt: "Use $transcription-feature-implementer to implement the next focused Transcription Project feature."
+
+policy:
+  allow_implicit_invocation: true
