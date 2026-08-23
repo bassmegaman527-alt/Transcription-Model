@@ -767,9 +767,16 @@
         var editableRawTranscript by remember(note.id, note.rawTranscript) {
             mutableStateOf(note.rawTranscript)
         }
+        var editableDevelopmentContent by remember(note.id, note.developmentContent) {
+            mutableStateOf(note.developmentContent)
+        }
         val cleanedTitle = editableTitle.trim()
         val cleanedTranscript = editableRawTranscript.trim()
-        val hasChanges = cleanedTitle != note.structured.title || cleanedTranscript != note.rawTranscript
+        val cleanedDevelopmentContent = editableDevelopmentContent.trim()
+        val titleChanged = cleanedTitle != note.structured.title
+        val transcriptChanged = cleanedTranscript != note.rawTranscript
+        val developmentChanged = cleanedDevelopmentContent != note.developmentContent
+        val hasChanges = titleChanged || transcriptChanged || developmentChanged
         val canSaveWithoutTranscript = note.rawTranscript.isBlank()
         val canSave = hasChanges && (cleanedTranscript.isNotBlank() || canSaveWithoutTranscript)
 
@@ -790,7 +797,7 @@
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Edit note", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
                     Text(
-                        text = "Update the title or transcript, then save your changes.",
+                        text = "Update the title, transcript, or development, then save your changes.",
                         style = MaterialTheme.typography.bodyLarge,
                     )
                 }
@@ -847,15 +854,39 @@
             }
 
             item {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedTextField(
+                        value = editableDevelopmentContent,
+                        onValueChange = { editableDevelopmentContent = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Development") },
+                        placeholder = { Text("Add thoughts, context, or next steps") },
+                        minLines = 6,
+                        maxLines = 12,
+                    )
+                    Text(
+                        text = "Your development is saved separately from the original capture.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+
+            item {
                 Button(
                     onClick = {
-                        val regeneratedStructure = structureTranscript(cleanedTranscript)
+                        val updatedStructure = if (titleChanged || transcriptChanged) {
+                            val regeneratedStructure = structureTranscript(cleanedTranscript)
+                            regeneratedStructure.copy(
+                                title = cleanedTitle.ifBlank { regeneratedStructure.title },
+                            )
+                        } else {
+                            note.structured
+                        }
                         onSave(
                             note.copy(
                                 rawTranscript = cleanedTranscript,
-                                structured = regeneratedStructure.copy(
-                                    title = cleanedTitle.ifBlank { regeneratedStructure.title },
-                                ),
+                                structured = updatedStructure,
+                                developmentContent = cleanedDevelopmentContent,
                             ),
                         )
                     },
@@ -1118,6 +1149,7 @@
         .put("id", id)
         .put("rawTranscript", rawTranscript)
         .put("sourceTranscript", sourceTranscript)
+        .put("developmentContent", developmentContent)
         .put("createdAtMillis", createdAtMillis)
         .put("durationMillis", durationMillis)
         .put("structured", structured.toJsonObject())
@@ -1154,6 +1186,11 @@
             rawTranscript = rawTranscript,
             sourceTranscript = sourceTranscript,
             structured = optJSONObject("structured")?.toStructuredNote() ?: structureTranscript(rawTranscript),
+            developmentContent = if (has("developmentContent") && !isNull("developmentContent")) {
+                optString("developmentContent")
+            } else {
+                ""
+            },
             createdAtMillis = optLong("createdAtMillis", System.currentTimeMillis()),
             durationMillis = optLong("durationMillis"),
         )
