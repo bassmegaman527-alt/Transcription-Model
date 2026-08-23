@@ -31,6 +31,7 @@ data class StructuredNote(
 data class Note(
     val id: String = UUID.randomUUID().toString(),
     val rawTranscript: String,
+    val sourceTranscript: String = rawTranscript,
     val structured: StructuredNote,
     val createdAtMillis: Long = System.currentTimeMillis(),
     val durationMillis: Long,
