@@ -33,6 +33,7 @@ data class Note(
     val rawTranscript: String,
     val sourceTranscript: String = rawTranscript,
     val structured: StructuredNote,
+    val developmentContent: String = "",
     val createdAtMillis: Long = System.currentTimeMillis(),
     val durationMillis: Long,
 ) {
