@@ -62,24 +62,9 @@ data class CaptureSession(
 }
 
 fun structureTranscript(rawTranscript: String): StructuredNote {
-    val cleanWords = rawTranscript
-        .split(' ', '\n', '\t')
-        .map { it.trim(',', '.', '!', '?', ':', ';', '"').lowercase() }
-        .filter { it.length > 3 }
-
     val title = rawTranscript.toMeaningfulTitle()
     val summary = rawTranscript.toConciseSummary()
-
-    val tags = cleanWords
-        .groupingBy { it }
-        .eachCount()
-        .entries
-        .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
-        .map { it.key }
-        .filterNot { it in fillerWords }
-        .take(5)
-        .ifEmpty { listOf("idea") }
-
+    val tags = rawTranscript.toTags()
     val actionItems = rawTranscript.toActionItems()
 
     return StructuredNote(
@@ -88,6 +73,38 @@ fun structureTranscript(rawTranscript: String): StructuredNote {
         tags = tags,
         actionItems = actionItems,
     )
+}
+
+private fun String.toTags(): List<String> {
+    val candidateWords = tagWordRegex
+        .findAll(this)
+        .map { match ->
+            match.value
+                .lowercase(Locale.getDefault())
+                .trim('\'', '’', '-')
+        }
+        .filter { word -> word !in tagStopWords }
+        .filter { word -> word.length >= MIN_TAG_LENGTH || word in allowedShortTags }
+        .toList()
+    if (candidateWords.isEmpty()) {
+        return listOf(DEFAULT_TAG)
+    }
+
+    val firstMentionOrder = candidateWords
+        .distinct()
+        .withIndex()
+        .associate { indexedWord -> indexedWord.value to indexedWord.index }
+
+    return candidateWords
+        .groupingBy { word -> word }
+        .eachCount()
+        .entries
+        .sortedWith(
+            compareByDescending<Map.Entry<String, Int>> { entry -> entry.value }
+                .thenBy { entry -> firstMentionOrder.getValue(entry.key) },
+        )
+        .map { entry -> entry.key }
+        .take(MAX_TAGS)
 }
 
 private fun String.toActionItems(): List<ActionItem> = splitToSequence('.', '!', '?', ';', '\n')
@@ -189,28 +206,129 @@ private fun String.isGenericCaptureFallback(): Boolean {
     return normalized in genericCaptureFallbacks
 }
 
-private val fillerWords = setOf(
-    "about",
-    "after",
-    "again",
-    "because",
-    "could",
-    "should",
-    "that",
-    "this",
-    "with",
-)
-
 private const val MAX_TITLE_WORDS = 6
 private const val MAX_TITLE_LENGTH = 60
 private const val MAX_SUMMARY_SENTENCES = 2
 private const val MAX_SUMMARY_LENGTH = 240
 private const val MAX_ACTION_ITEMS = 5
+private const val MAX_TAGS = 5
+private const val MIN_TAG_LENGTH = 3
 private const val SUMMARY_ELLIPSIS = "..."
 private const val EMPTY_SUMMARY = "No transcript captured."
+private const val DEFAULT_TAG = "idea"
 
 private val summarySentenceRegex = Regex("[^.!?]+[.!?]?")
 private val actionWhitespaceRegex = Regex("\\s+")
+private val tagWordRegex = Regex("""[\p{L}\p{N}][\p{L}\p{N}'’-]*""")
+
+private val allowedShortTags = setOf(
+    "ai",
+    "ar",
+    "hr",
+    "ml",
+    "ui",
+    "ux",
+    "vr",
+)
+
+private val tagStopWords = setOf(
+    "a",
+    "about",
+    "after",
+    "again",
+    "all",
+    "also",
+    "am",
+    "an",
+    "and",
+    "any",
+    "are",
+    "as",
+    "at",
+    "be",
+    "because",
+    "been",
+    "before",
+    "being",
+    "but",
+    "by",
+    "can",
+    "could",
+    "did",
+    "do",
+    "does",
+    "doing",
+    "don't",
+    "dont",
+    "for",
+    "from",
+    "get",
+    "got",
+    "had",
+    "has",
+    "have",
+    "i",
+    "i'm",
+    "idea",
+    "if",
+    "in",
+    "into",
+    "im",
+    "is",
+    "it",
+    "its",
+    "just",
+    "let's",
+    "lets",
+    "like",
+    "maybe",
+    "me",
+    "more",
+    "my",
+    "need",
+    "note",
+    "now",
+    "of",
+    "on",
+    "one",
+    "or",
+    "our",
+    "please",
+    "really",
+    "recording",
+    "should",
+    "so",
+    "some",
+    "that",
+    "that's",
+    "thats",
+    "the",
+    "their",
+    "them",
+    "then",
+    "there",
+    "these",
+    "they",
+    "thing",
+    "this",
+    "those",
+    "to",
+    "transcript",
+    "two",
+    "uh",
+    "um",
+    "want",
+    "was",
+    "we",
+    "we're",
+    "were",
+    "will",
+    "with",
+    "would",
+    "you",
+    "you're",
+    "your",
+)
 
 private val genericCaptureFallbacks = setOf(
     "quick idea captured from the prototype",
