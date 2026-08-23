@@ -829,8 +829,13 @@
         if (showDeleteConfirmation) {
             AlertDialog(
                 onDismissRequest = { showDeleteConfirmation = false },
-                title = { Text("Delete this note?") },
-                text = { Text("This removes the note from your Inbox on this device.") },
+                title = { Text("Delete note?") },
+                text = {
+                    Text(
+                        "“${note.structured.title}” will be permanently removed from this device. " +
+                            "This action cannot be undone.",
+                    )
+                },
                 confirmButton = {
                     TextButton(
                         onClick = {
@@ -838,12 +843,12 @@
                             onDeleteNote(note)
                         },
                     ) {
-                        Text("Delete")
+                        Text("Delete note")
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showDeleteConfirmation = false }) {
-                        Text("Cancel")
+                        Text("Keep note")
                     }
                 },
             )
