@@ -5,6 +5,7 @@
     import android.content.Intent
     import android.content.pm.PackageManager
     import android.os.Bundle
+    import androidx.activity.compose.BackHandler
     import androidx.activity.ComponentActivity
     import androidx.activity.compose.rememberLauncherForActivityResult
     import androidx.activity.compose.setContent
@@ -510,6 +511,18 @@
         onStartCapture: () -> Unit,
         modifier: Modifier = Modifier,
     ) {
+        var selectedNoteId by remember { mutableStateOf<String?>(null) }
+        val selectedNote = notes.firstOrNull { note -> note.id == selectedNoteId }
+
+        if (selectedNote != null) {
+            NoteDetailScreen(
+                note = selectedNote,
+                onBack = { selectedNoteId = null },
+                modifier = modifier,
+            )
+            return
+        }
+
         val visibleNotes = notes.filterBySearchQuery(searchQuery)
 
         LazyColumn(
@@ -563,6 +576,7 @@
             items(visibleNotes, key = { it.id }) { note ->
                 NoteCard(
                     note = note,
+                    onOpenNote = { selectedNoteId = note.id },
                     onDeleteNote = onDeleteNote,
                     onUpdateNote = onUpdateNote,
                 )
@@ -572,13 +586,101 @@
 
     @OptIn(ExperimentalLayoutApi::class)
     @Composable
+    private fun NoteDetailScreen(
+        note: Note,
+        onBack: () -> Unit,
+        modifier: Modifier = Modifier,
+    ) {
+        val context = LocalContext.current
+        BackHandler(onBack = onBack)
+
+        LazyColumn(
+            modifier = modifier.fillMaxSize(),
+            contentPadding = PaddingValues(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            item {
+                TextButton(onClick = onBack) {
+                    Text("Back to Inbox")
+                }
+            }
+
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = note.structured.title,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = "${note.displayTime} • ${note.durationSeconds}s",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Summary", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(note.structured.summary, style = MaterialTheme.typography.bodyLarge)
+                }
+            }
+
+            if (note.structured.tags.isNotEmpty()) {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Tags", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            note.structured.tags.forEach { tag ->
+                                AssistChip(onClick = {}, label = { Text(tag) })
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Raw transcript", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = note.rawTranscript.ifBlank { "No transcript captured." },
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+            }
+
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Action items", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    if (note.structured.actionItems.isEmpty()) {
+                        Text("No action items.")
+                    } else {
+                        note.structured.actionItems.forEach { actionItem ->
+                            Text("• ${actionItem.text}")
+                        }
+                    }
+                }
+            }
+
+            item {
+                OutlinedButton(
+                    onClick = { shareNote(context, note) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Share note")
+                }
+            }
+        }
+    }
+
+    @OptIn(ExperimentalLayoutApi::class)
+    @Composable
     private fun NoteCard(
         note: Note,
+        onOpenNote: () -> Unit,
         onDeleteNote: (Note) -> Unit,
         onUpdateNote: (Note) -> Unit,
     ) {
-        val context = LocalContext.current
-        var expanded by remember { mutableStateOf(false) }
         var showDeleteConfirmation by remember { mutableStateOf(false) }
         var showEditDialog by remember { mutableStateOf(false) }
         var editableTitle by remember(note.id, note.structured.title) { mutableStateOf(note.structured.title) }
@@ -666,7 +768,7 @@
             )
         }
 
-        Card(modifier = Modifier.fillMaxWidth(), onClick = { expanded = !expanded }) {
+        Card(modifier = Modifier.fillMaxWidth(), onClick = onOpenNote) {
             Column(modifier = Modifier.padding(18.dp)) {
                 Text(note.structured.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                 Text("${note.displayTime} • ${note.durationSeconds}s", style = MaterialTheme.typography.bodySmall)
@@ -679,24 +781,6 @@
                     }
                 }
 
-                if (expanded) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("Raw transcript", fontWeight = FontWeight.SemiBold)
-                    Text(note.rawTranscript)
-                    if (note.structured.actionItems.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text("Action items", fontWeight = FontWeight.SemiBold)
-                        note.structured.actionItems.forEach { item -> Text("• ${item.text}") }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = { shareNote(context, note) }) {
-                            Text("Share")
-                        }
-                        TextButton(onClick = { expanded = false }) {
-                            Text("Collapse")
-                        }
-                    }
-                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = { showEditDialog = true }) {
                         Text("Edit")
