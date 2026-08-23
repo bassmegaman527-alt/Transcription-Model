@@ -1,0 +1,7 @@
+interface:
+  display_name: "Transcription Product Planner"
+  short_description: "Plan the next focused Android product change"
+  default_prompt: "Use $transcription-product-planner to decide and scope what the Transcription Project should build next."
+
+policy:
+  allow_implicit_invocation: true
