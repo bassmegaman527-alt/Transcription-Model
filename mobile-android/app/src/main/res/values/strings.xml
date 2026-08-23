@@ -2,4 +2,5 @@
 <resources>
     <string name="quick_capture_short_label">Capture</string>
     <string name="quick_capture_long_label">Quick capture</string>
+    <string name="quick_capture_tile_label">Quick capture</string>
 </resources>
