@@ -1,0 +1,7 @@
+interface:
+  display_name: "Transcription Android Debugger"
+  short_description: "Trace Android failures to the safest fix"
+  default_prompt: "Use $transcription-android-debugger to diagnose this Transcription Project Android failure."
+
+policy:
+  allow_implicit_invocation: true
