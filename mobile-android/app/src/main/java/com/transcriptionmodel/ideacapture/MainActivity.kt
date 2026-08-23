@@ -384,6 +384,24 @@
         onStop: () -> Unit,
         modifier: Modifier = Modifier,
     ) {
+        val statusTitle = when {
+            session.status == CaptureStatus.Recording && session.errorMessage != null -> "Listening interrupted"
+            session.status == CaptureStatus.Recording -> "Listening now"
+            session.status == CaptureStatus.Structuring -> "Processing recording"
+            session.status == CaptureStatus.Saved || session.status == CaptureStatus.Structured -> "Saved to Inbox"
+            session.status == CaptureStatus.Failed -> "Unable to start listening"
+            session.status == CaptureStatus.AwaitingConfirmation -> "No speech captured"
+            else -> "Ready to capture"
+        }
+        val statusMessage = when (session.status) {
+            CaptureStatus.Idle -> "Tap Start, then speak naturally."
+            CaptureStatus.Recording -> session.errorMessage ?: "Speak naturally. Your words will appear below."
+            CaptureStatus.Saved, CaptureStatus.Structured -> "Your note is safely saved and ready in the Inbox."
+            CaptureStatus.Structuring -> "Finishing the transcript and saving your note..."
+            CaptureStatus.AwaitingConfirmation -> "Choose whether to save an empty note or discard this capture."
+            CaptureStatus.Failed -> session.errorMessage ?: "Speech recognition could not start. Please try again."
+        }
+
         LazyColumn(
             modifier = modifier.fillMaxSize(),
             contentPadding = PaddingValues(24.dp),
@@ -410,16 +428,19 @@
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Text(
-                            text = when (session.status) {
-                                CaptureStatus.Idle -> "Ready to capture your idea."
-                                CaptureStatus.Recording -> "Listening..."
-                                CaptureStatus.Saved, CaptureStatus.Structured -> "Saved to Inbox."
-                                CaptureStatus.Structuring -> "Saving your note..."
-                                CaptureStatus.AwaitingConfirmation -> "No speech was captured."
-                                CaptureStatus.Failed -> session.errorMessage ?: "Speech recognition failed."
-                            },
+                            text = statusTitle,
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = statusMessage,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (session.errorMessage != null) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            },
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(
@@ -445,14 +466,6 @@
                             text = session.liveTranscript.ifBlank { "Your words will appear here as you speak." },
                             style = MaterialTheme.typography.bodyLarge,
                         )
-                        session.errorMessage?.let { message ->
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = message,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                        }
                     }
                 }
             }
