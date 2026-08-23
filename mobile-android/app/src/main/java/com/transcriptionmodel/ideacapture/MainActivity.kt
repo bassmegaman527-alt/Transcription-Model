@@ -183,6 +183,15 @@
                     }
                 }
 
+                val requestOrStartSpeechCapture: () -> Unit = {
+                    selectedTab = AppTab.Capture
+                    if (hasCapturePermissions(context)) {
+                        startSpeechCapture()
+                    } else {
+                        microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                }
+
                 DisposableEffect(speechTranscriber) {
                     onDispose {
                         speechTranscriber.destroy()
@@ -254,13 +263,7 @@
                             session = session,
                             notesCount = notes.size,
                             modifier = Modifier.padding(innerPadding),
-                            onStart = {
-                                if (hasCapturePermissions(context)) {
-                                    startSpeechCapture()
-                                } else {
-                                    microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                                }
-                            },
+                            onStart = requestOrStartSpeechCapture,
                             onStop = {
                                 if (!isSavingCapture && session.isRecording) {
                                     isSavingCapture = true
@@ -313,7 +316,7 @@
                                 }
                             },
                             modifier = Modifier.padding(innerPadding),
-                            onStartCapture = { selectedTab = AppTab.Capture },
+                            onStartCapture = requestOrStartSpeechCapture,
                         )
 
                         AppTab.About -> AboutScreen(
@@ -566,7 +569,7 @@
                         Text("Recent structured notes")
                     }
                     OutlinedButton(onClick = onStartCapture) {
-                        Text("New")
+                        Text("New capture")
                     }
                 }
             }
