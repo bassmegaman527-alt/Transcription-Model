@@ -80,13 +80,7 @@ fun structureTranscript(rawTranscript: String): StructuredNote {
         .take(5)
         .ifEmpty { listOf("idea") }
 
-    val actionItems = rawTranscript
-        .split('.', '!', '?')
-        .map { it.trim() }
-        .filter { sentence -> actionPrefixes.any { sentence.lowercase().startsWith(it) } }
-        .distinctBy { it.lowercase() }
-        .take(5)
-        .map { ActionItem(text = it) }
+    val actionItems = rawTranscript.toActionItems()
 
     return StructuredNote(
         title = title,
@@ -95,6 +89,21 @@ fun structureTranscript(rawTranscript: String): StructuredNote {
         actionItems = actionItems,
     )
 }
+
+private fun String.toActionItems(): List<ActionItem> = splitToSequence('.', '!', '?', ';', '\n')
+    .map { candidate ->
+        candidate
+            .trim()
+            .trimStart('-', '•')
+            .trim()
+            .replace(actionWhitespaceRegex, " ")
+    }
+    .filter { candidate -> candidate.isNotBlank() }
+    .filter { candidate -> actionIntentPatterns.any { pattern -> pattern.containsMatchIn(candidate) } }
+    .distinctBy { candidate -> candidate.lowercase(Locale.getDefault()) }
+    .take(MAX_ACTION_ITEMS)
+    .map { candidate -> ActionItem(text = candidate) }
+    .toList()
 
 private fun String.toConciseSummary(): String {
     val normalizedTranscript = trim().replace(Regex("\\s+"), " ")
@@ -196,10 +205,12 @@ private const val MAX_TITLE_WORDS = 6
 private const val MAX_TITLE_LENGTH = 60
 private const val MAX_SUMMARY_SENTENCES = 2
 private const val MAX_SUMMARY_LENGTH = 240
+private const val MAX_ACTION_ITEMS = 5
 private const val SUMMARY_ELLIPSIS = "..."
 private const val EMPTY_SUMMARY = "No transcript captured."
 
 private val summarySentenceRegex = Regex("[^.!?]+[.!?]?")
+private val actionWhitespaceRegex = Regex("\\s+")
 
 private val genericCaptureFallbacks = setOf(
     "quick idea captured from the prototype",
@@ -262,14 +273,15 @@ private val titleTrailingWords = setOf(
     "with",
 )
 
-private val actionPrefixes = listOf(
-    "i need to",
-    "need to",
-    "todo",
-    "to do",
-    "remember to",
-    "follow up",
-    "create",
-    "build",
-    "write",
+private val actionIntentPatterns = listOf(
+    Regex("""\b(?:i|we)\s+(?:need|have|want)\s+to\b""", RegexOption.IGNORE_CASE),
+    Regex("""^(?:need|have|want)\s+to\b""", RegexOption.IGNORE_CASE),
+    Regex("""\b(?:i|we)\s+(?:should|must)\b""", RegexOption.IGNORE_CASE),
+    Regex("""^(?:should|must)\b""", RegexOption.IGNORE_CASE),
+    Regex("""\b(?:remember|remind me|don't forget|do not forget|make sure)\s+to\b""", RegexOption.IGNORE_CASE),
+    Regex("""^(?:todo|to do)\b(?:\s*[:\-]\s*|\s+)""", RegexOption.IGNORE_CASE),
+    Regex(
+        """^(?:please\s+)?(?:call|email|send|schedule|buy|review|update|finish|check|create|build|write|plan|follow\s+up)\b""",
+        RegexOption.IGNORE_CASE,
+    ),
 )
