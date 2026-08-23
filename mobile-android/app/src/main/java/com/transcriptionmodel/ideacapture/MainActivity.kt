@@ -23,6 +23,7 @@
     import androidx.compose.foundation.layout.padding
     import androidx.compose.foundation.lazy.LazyColumn
     import androidx.compose.foundation.lazy.items
+    import androidx.compose.foundation.lazy.rememberLazyListState
     import androidx.compose.foundation.shape.CircleShape
     import androidx.compose.material3.AlertDialog
     import androidx.compose.material3.AssistChip
@@ -512,6 +513,7 @@
         modifier: Modifier = Modifier,
     ) {
         var selectedNoteId by remember { mutableStateOf<String?>(null) }
+        val inboxListState = rememberLazyListState()
         val selectedNote = notes.firstOrNull { note -> note.id == selectedNoteId }
 
         if (selectedNote != null) {
@@ -527,6 +529,7 @@
 
         LazyColumn(
             modifier = modifier.fillMaxSize(),
+            state = inboxListState,
             contentPadding = PaddingValues(20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
