@@ -159,7 +159,7 @@ private fun String.toSummaryExcerpt(): String {
 
 private fun String.toMeaningfulTitle(): String {
     val normalizedTranscript = trim()
-    if (normalizedTranscript.isBlank() || normalizedTranscript.isGenericCaptureFallback()) {
+    if (normalizedTranscript.isBlank() || normalizedTranscript.isPlaceholderCaptureTranscript()) {
         return "Untitled idea"
     }
 
@@ -199,8 +199,10 @@ private fun String.toMeaningfulTitle(): String {
         ?: "Untitled idea"
 }
 
-private fun String.isGenericCaptureFallback(): Boolean {
-    val normalized = lowercase(Locale.getDefault())
+internal fun String.isPlaceholderCaptureTranscript(): Boolean {
+    val normalized = trim()
+        .lowercase(Locale.getDefault())
+        .replace(Regex("\\s+"), " ")
         .trim(',', '.', '!', '?', ':', ';', '"')
 
     return normalized in genericCaptureFallbacks
