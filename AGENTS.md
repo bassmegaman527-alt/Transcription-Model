@@ -69,6 +69,18 @@ Prefer Android, Kotlin, Compose, and dependencies already present in the reposit
 
 Use the project-specific Codex skills when their scope matches the task.
 
+### Product planning
+
+Use `$transcription-product-planner` for:
+- deciding what to build next
+- brainstorming or prioritizing features
+- reviewing the roadmap or next milestone
+- comparing product or Android feasibility directions
+- defining the smallest useful version
+- turning an idea into focused development items or a requested GitHub issue
+
+The product-planning skill must inspect the current repository, separate implemented behavior from plans, define the user problem, account for Android and privacy constraints, and stop before implementation unless the user explicitly asks to proceed.
+
 ### Feature work
 
 Use `$transcription-feature-implementer` for:
