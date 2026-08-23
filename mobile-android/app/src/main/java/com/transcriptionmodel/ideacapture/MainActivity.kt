@@ -10,7 +10,9 @@
     import androidx.activity.compose.rememberLauncherForActivityResult
     import androidx.activity.compose.setContent
     import androidx.activity.result.contract.ActivityResultContracts
+    import androidx.compose.foundation.background
     import androidx.compose.foundation.layout.Arrangement
+    import androidx.compose.foundation.layout.Box
     import androidx.compose.foundation.layout.Column
     import androidx.compose.foundation.layout.ExperimentalLayoutApi
     import androidx.compose.foundation.layout.FlowRow
@@ -21,6 +23,7 @@
     import androidx.compose.foundation.layout.fillMaxWidth
     import androidx.compose.foundation.layout.height
     import androidx.compose.foundation.layout.padding
+    import androidx.compose.foundation.layout.size
     import androidx.compose.foundation.lazy.LazyColumn
     import androidx.compose.foundation.lazy.items
     import androidx.compose.foundation.lazy.rememberLazyListState
@@ -427,6 +430,17 @@
             CaptureStatus.AwaitingConfirmation -> "Choose whether to save or discard this capture."
             CaptureStatus.Failed -> session.errorMessage ?: "Speech recognition could not start. Please try again."
         }
+        val isActivelyListening = session.isRecording && session.errorMessage == null
+        val statusContainerColor = if (isActivelyListening) {
+            MaterialTheme.colorScheme.errorContainer
+        } else {
+            MaterialTheme.colorScheme.primaryContainer
+        }
+        val statusContentColor = if (isActivelyListening) {
+            MaterialTheme.colorScheme.onErrorContainer
+        } else {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        }
 
         LazyColumn(
             modifier = modifier.fillMaxSize(),
@@ -446,13 +460,36 @@
             }
 
             item {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = statusContainerColor,
+                        contentColor = statusContentColor,
+                    ),
+                ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
+                        if (isActivelyListening) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(12.dp)
+                                        .background(MaterialTheme.colorScheme.error, CircleShape),
+                                )
+                                Text(
+                                    text = "Recording",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
                         Text(
                             text = statusTitle,
                             style = MaterialTheme.typography.titleLarge,
@@ -465,7 +502,7 @@
                             color = if (session.errorMessage != null) {
                                 MaterialTheme.colorScheme.error
                             } else {
-                                MaterialTheme.colorScheme.onPrimaryContainer
+                                statusContentColor
                             },
                         )
                         Spacer(modifier = Modifier.height(16.dp))
