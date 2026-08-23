@@ -68,6 +68,7 @@
 
     private val Context.notesDataStore by preferencesDataStore(name = "idea_capture_notes")
     private val notesJsonKey = stringPreferencesKey("notes_json")
+    private val searchTermSeparator = Regex("\\s+")
 
     class MainActivity : ComponentActivity() {
         override fun onCreate(savedInstanceState: Bundle?) {
@@ -576,6 +577,24 @@
                 )
             }
 
+            if (searchQuery.isNotBlank()) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = if (visibleNotes.size == 1) "1 result" else "${visibleNotes.size} results",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        TextButton(onClick = { onSearchQueryChange("") }) {
+                            Text("Clear search")
+                        }
+                    }
+                }
+            }
+
             if (visibleNotes.isEmpty()) {
                 item {
                     Card(modifier = Modifier.fillMaxWidth()) {
@@ -901,13 +920,17 @@
     }
 
     private fun List<Note>.filterBySearchQuery(query: String): List<Note> {
-        val normalizedQuery = query.trim().lowercase()
-        if (normalizedQuery.isBlank()) return this
+        val queryTerms = query
+            .trim()
+            .lowercase()
+            .split(searchTermSeparator)
+            .filter { term -> term.isNotBlank() }
+        if (queryTerms.isEmpty()) return this
 
-        return filter { note -> note.matchesSearchQuery(normalizedQuery) }
+        return filter { note -> note.matchesSearchQuery(queryTerms) }
     }
 
-    private fun Note.matchesSearchQuery(query: String): Boolean {
+    private fun Note.matchesSearchQuery(queryTerms: List<String>): Boolean {
         val searchableText = buildString {
             append(structured.title).append(' ')
             append(rawTranscript).append(' ')
@@ -916,7 +939,7 @@
             append(structured.actionItems.joinToString(" ") { it.text })
         }.lowercase()
 
-        return searchableText.contains(query)
+        return queryTerms.all { term -> searchableText.contains(term) }
     }
 
     private fun hasCapturePermissions(context: Context): Boolean = capturePermissions()
