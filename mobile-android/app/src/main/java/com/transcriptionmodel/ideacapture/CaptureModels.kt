@@ -107,12 +107,28 @@ private fun String.toMeaningfulTitle(): String {
     }
 
     val titleWords = normalizedTranscript
-        .splitToSequence(Regex("\\s+"))
-        .map { word -> word.trim(',', '.', '!', '?', ':', ';', '"', '“', '”', '(', ')') }
-        .filter { word -> word.isNotBlank() }
-        .filterNot { word -> word.lowercase(Locale.getDefault()) in titleFillerWords }
-        .take(MAX_TITLE_WORDS)
-        .toList()
+        .splitToSequence(Regex("[.!?\\n]+"))
+        .map { sentence ->
+            val words = sentence
+                .splitToSequence(Regex("\\s+"))
+                .map { word -> word.trim(',', '.', '!', '?', ':', ';', '"', '“', '”', '(', ')') }
+                .filter { word -> word.isNotBlank() }
+                .toList()
+            val meaningfulStart = words.indexOfFirst { word ->
+                word.lowercase(Locale.getDefault()) !in titleLeadInWords
+            }
+
+            if (meaningfulStart < 0) {
+                emptyList()
+            } else {
+                words
+                    .drop(meaningfulStart)
+                    .take(MAX_TITLE_WORDS)
+                    .dropLastWhile { word -> word.lowercase(Locale.getDefault()) in titleTrailingWords }
+            }
+        }
+        .firstOrNull { words -> words.isNotEmpty() }
+        .orEmpty()
 
     val title = titleWords
         .joinToString(" ")
@@ -153,35 +169,60 @@ private val genericCaptureFallbacks = setOf(
     "quick idea captured from prototype",
 )
 
-private val titleFillerWords = fillerWords + setOf(
+private val titleLeadInWords = setOf(
     "a",
+    "about",
     "an",
     "and",
     "are",
     "can",
     "captured",
+    "could",
     "for",
     "from",
     "have",
     "i",
     "idea",
+    "is",
+    "just",
     "like",
     "maybe",
+    "my",
     "need",
     "note",
     "of",
     "on",
+    "our",
     "prototype",
     "quick",
     "recording",
     "really",
+    "should",
     "so",
+    "that",
     "the",
+    "this",
     "to",
     "transcript",
     "um",
     "uh",
+    "want",
+    "wanted",
     "we",
+    "would",
+)
+
+private val titleTrailingWords = setOf(
+    "a",
+    "an",
+    "and",
+    "for",
+    "from",
+    "of",
+    "on",
+    "the",
+    "to",
+    "with",
 )
 
 private val actionPrefixes = listOf(
