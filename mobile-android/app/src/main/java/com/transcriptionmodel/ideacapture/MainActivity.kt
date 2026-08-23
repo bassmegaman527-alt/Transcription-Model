@@ -197,6 +197,7 @@
                 fun saveCapture(transcript: String, durationMillis: Long) {
                     val note = Note(
                         rawTranscript = transcript,
+                        sourceTranscript = transcript,
                         structured = structureTranscript(transcript),
                         durationMillis = durationMillis,
                     )
@@ -1116,6 +1117,7 @@
     private fun Note.toJsonObject(): JSONObject = JSONObject()
         .put("id", id)
         .put("rawTranscript", rawTranscript)
+        .put("sourceTranscript", sourceTranscript)
         .put("createdAtMillis", createdAtMillis)
         .put("durationMillis", durationMillis)
         .put("structured", structured.toJsonObject())
@@ -1139,13 +1141,23 @@
         getJSONObject(index).toNote()
     }
 
-    private fun JSONObject.toNote(): Note = Note(
-        id = optString("id", UUID.randomUUID().toString()),
-        rawTranscript = optString("rawTranscript"),
-        structured = optJSONObject("structured")?.toStructuredNote() ?: structureTranscript(optString("rawTranscript")),
-        createdAtMillis = optLong("createdAtMillis", System.currentTimeMillis()),
-        durationMillis = optLong("durationMillis"),
-    )
+    private fun JSONObject.toNote(): Note {
+        val rawTranscript = optString("rawTranscript")
+        val sourceTranscript = if (has("sourceTranscript") && !isNull("sourceTranscript")) {
+            optString("sourceTranscript")
+        } else {
+            rawTranscript
+        }
+
+        return Note(
+            id = optString("id", UUID.randomUUID().toString()),
+            rawTranscript = rawTranscript,
+            sourceTranscript = sourceTranscript,
+            structured = optJSONObject("structured")?.toStructuredNote() ?: structureTranscript(rawTranscript),
+            createdAtMillis = optLong("createdAtMillis", System.currentTimeMillis()),
+            durationMillis = optLong("durationMillis"),
+        )
+    }
 
     private fun JSONObject.toStructuredNote(): StructuredNote = StructuredNote(
         title = optString("title", "Untitled idea"),
