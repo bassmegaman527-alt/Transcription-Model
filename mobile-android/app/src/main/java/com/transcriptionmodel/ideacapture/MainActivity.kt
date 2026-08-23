@@ -417,7 +417,7 @@
             else -> "Ready to capture"
         }
         val statusMessage = when (session.status) {
-            CaptureStatus.Idle -> "Tap Start, then speak naturally."
+            CaptureStatus.Idle -> "Tap Start recording, then speak naturally."
             CaptureStatus.Recording -> session.errorMessage ?: "Speak naturally. Your words will appear below."
             CaptureStatus.Saved, CaptureStatus.Structured -> "Your note is safely saved and ready in the Inbox."
             CaptureStatus.Structuring -> "Finishing the transcript and saving your note..."
@@ -468,11 +468,15 @@
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(
                             onClick = if (session.isRecording) onStop else onStart,
+                            modifier = Modifier.fillMaxWidth(),
                             enabled = session.status != CaptureStatus.Structuring,
                             shape = CircleShape,
                             contentPadding = PaddingValues(horizontal = 42.dp, vertical = 28.dp),
                         ) {
-                            Text(if (session.isRecording) "Stop" else "Start", style = MaterialTheme.typography.titleLarge)
+                            Text(
+                                text = if (session.isRecording) "Stop recording" else "Start recording",
+                                style = MaterialTheme.typography.titleLarge,
+                            )
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         Text("$notesCount saved notes")
@@ -495,7 +499,7 @@
 
             item {
                 Text(
-                    text = "Speech recognition uses Android SpeechRecognizer. Speak after tapping Start, then tap Stop to save the recognized transcript into the inbox.",
+                    text = "Speech recognition uses Android SpeechRecognizer. Speak after tapping Start recording, then tap Stop recording to save the recognized transcript into the inbox.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
