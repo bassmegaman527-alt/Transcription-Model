@@ -82,6 +82,11 @@
         About("About", "ℹ️"),
     }
 
+    private data class PendingCaptureConfirmation(
+        val transcript: String,
+        val durationMillis: Long,
+    )
+
     @Composable
     fun IdeaCaptureApp() {
         MaterialTheme(colorScheme = lightColorScheme()) {
@@ -94,7 +99,7 @@
                 var notes by remember { mutableStateOf(emptyList<Note>()) }
                 var inboxSearchQuery by remember { mutableStateOf("") }
                 var isSavingCapture by remember { mutableStateOf(false) }
-                var pendingEmptyCaptureDurationMillis by remember { mutableStateOf<Long?>(null) }
+                var pendingCaptureConfirmation by remember { mutableStateOf<PendingCaptureConfirmation?>(null) }
                 val coroutineScope = rememberCoroutineScope()
 
                 LaunchedEffect(appContext) {
@@ -137,7 +142,7 @@
 
                 fun startSpeechCapture() {
                     isSavingCapture = false
-                    pendingEmptyCaptureDurationMillis = null
+                    pendingCaptureConfirmation = null
                     session = CaptureSession(
                         status = CaptureStatus.Recording,
                         startedAtMillis = System.currentTimeMillis(),
@@ -159,7 +164,7 @@
                         session = CaptureSession(status = CaptureStatus.Structured)
                         selectedTab = AppTab.Inbox
                     }
-                    pendingEmptyCaptureDurationMillis = null
+                    pendingCaptureConfirmation = null
                 }
 
                 val microphonePermissionLauncher = rememberLauncherForActivityResult(
@@ -181,29 +186,41 @@
                     }
                 }
 
-                pendingEmptyCaptureDurationMillis?.let { durationMillis ->
+                pendingCaptureConfirmation?.let { pendingCapture ->
+                    val isEmptyCapture = pendingCapture.transcript.isBlank()
                     AlertDialog(
                         onDismissRequest = {},
-                        title = { Text("No speech captured") },
+                        title = {
+                            Text(if (isEmptyCapture) "No speech captured" else "Placeholder transcript detected")
+                        },
                         text = {
-                            Text("No speech was captured. Do you want to save an empty note or discard this capture?")
+                            Text(
+                                if (isEmptyCapture) {
+                                    "No speech was captured. Do you want to save an empty note or discard this capture?"
+                                } else {
+                                    "The captured text matches a prototype placeholder. Do you want to save it anyway or discard this capture?"
+                                },
+                            )
                         },
                         confirmButton = {
                             TextButton(
                                 onClick = {
-                                    if (pendingEmptyCaptureDurationMillis != null) {
-                                        pendingEmptyCaptureDurationMillis = null
-                                        saveCapture(transcript = "", durationMillis = durationMillis)
+                                    if (pendingCaptureConfirmation != null) {
+                                        pendingCaptureConfirmation = null
+                                        saveCapture(
+                                            transcript = pendingCapture.transcript,
+                                            durationMillis = pendingCapture.durationMillis,
+                                        )
                                     }
                                 },
                             ) {
-                                Text("Save empty note")
+                                Text(if (isEmptyCapture) "Save empty note" else "Save anyway")
                             }
                         },
                         dismissButton = {
                             TextButton(
                                 onClick = {
-                                    pendingEmptyCaptureDurationMillis = null
+                                    pendingCaptureConfirmation = null
                                     isSavingCapture = false
                                     session = CaptureSession()
                                     selectedTab = AppTab.Capture
@@ -258,9 +275,12 @@
                                             partialTranscript,
                                             pendingTranscript,
                                         )
-                                        if (rawTranscript.isBlank()) {
+                                        if (rawTranscript.isBlank() || rawTranscript.isPlaceholderCaptureTranscript()) {
                                             session = session.copy(status = CaptureStatus.AwaitingConfirmation)
-                                            pendingEmptyCaptureDurationMillis = durationMillis
+                                            pendingCaptureConfirmation = PendingCaptureConfirmation(
+                                                transcript = rawTranscript,
+                                                durationMillis = durationMillis,
+                                            )
                                         } else {
                                             saveCapture(rawTranscript, durationMillis)
                                         }
@@ -390,7 +410,7 @@
             session.status == CaptureStatus.Structuring -> "Processing recording"
             session.status == CaptureStatus.Saved || session.status == CaptureStatus.Structured -> "Saved to Inbox"
             session.status == CaptureStatus.Failed -> "Unable to start listening"
-            session.status == CaptureStatus.AwaitingConfirmation -> "No speech captured"
+            session.status == CaptureStatus.AwaitingConfirmation -> "Review capture"
             else -> "Ready to capture"
         }
         val statusMessage = when (session.status) {
@@ -398,7 +418,7 @@
             CaptureStatus.Recording -> session.errorMessage ?: "Speak naturally. Your words will appear below."
             CaptureStatus.Saved, CaptureStatus.Structured -> "Your note is safely saved and ready in the Inbox."
             CaptureStatus.Structuring -> "Finishing the transcript and saving your note..."
-            CaptureStatus.AwaitingConfirmation -> "Choose whether to save an empty note or discard this capture."
+            CaptureStatus.AwaitingConfirmation -> "Choose whether to save or discard this capture."
             CaptureStatus.Failed -> session.errorMessage ?: "Speech recognition could not start. Please try again."
         }
 
