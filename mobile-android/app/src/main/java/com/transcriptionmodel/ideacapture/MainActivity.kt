@@ -619,7 +619,7 @@
         val cleanedTitle = editableTitle.trim()
         val cleanedTranscript = editableRawTranscript.trim()
         val hasChanges = cleanedTitle != note.structured.title || cleanedTranscript != note.rawTranscript
-        val canSaveWithoutTranscript = note.rawTranscript.isBlank() && cleanedTitle.isNotBlank()
+        val canSaveWithoutTranscript = note.rawTranscript.isBlank()
         val canSave = hasChanges && (cleanedTranscript.isNotBlank() || canSaveWithoutTranscript)
 
         BackHandler(onBack = onCancel)
