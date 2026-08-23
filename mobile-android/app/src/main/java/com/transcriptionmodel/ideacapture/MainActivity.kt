@@ -513,13 +513,29 @@
         modifier: Modifier = Modifier,
     ) {
         var selectedNoteId by remember { mutableStateOf<String?>(null) }
+        var editingNoteId by remember { mutableStateOf<String?>(null) }
         val inboxListState = rememberLazyListState()
+        val editingNote = notes.firstOrNull { note -> note.id == editingNoteId }
         val selectedNote = notes.firstOrNull { note -> note.id == selectedNoteId }
+
+        if (editingNote != null) {
+            NoteEditScreen(
+                note = editingNote,
+                onCancel = { editingNoteId = null },
+                onSave = { updatedNote ->
+                    editingNoteId = null
+                    onUpdateNote(updatedNote)
+                },
+                modifier = modifier,
+            )
+            return
+        }
 
         if (selectedNote != null) {
             NoteDetailScreen(
                 note = selectedNote,
                 onBack = { selectedNoteId = null },
+                onEditNote = { editingNoteId = selectedNote.id },
                 modifier = modifier,
             )
             return
@@ -580,9 +596,123 @@
                 NoteCard(
                     note = note,
                     onOpenNote = { selectedNoteId = note.id },
+                    onEditNote = { editingNoteId = note.id },
                     onDeleteNote = onDeleteNote,
-                    onUpdateNote = onUpdateNote,
                 )
+            }
+        }
+    }
+
+    @Composable
+    private fun NoteEditScreen(
+        note: Note,
+        onCancel: () -> Unit,
+        onSave: (Note) -> Unit,
+        modifier: Modifier = Modifier,
+    ) {
+        var editableTitle by remember(note.id, note.structured.title) {
+            mutableStateOf(note.structured.title)
+        }
+        var editableRawTranscript by remember(note.id, note.rawTranscript) {
+            mutableStateOf(note.rawTranscript)
+        }
+        val cleanedTitle = editableTitle.trim()
+        val cleanedTranscript = editableRawTranscript.trim()
+        val hasChanges = cleanedTitle != note.structured.title || cleanedTranscript != note.rawTranscript
+        val canSaveWithoutTranscript = note.rawTranscript.isBlank() && cleanedTitle.isNotBlank()
+        val canSave = hasChanges && (cleanedTranscript.isNotBlank() || canSaveWithoutTranscript)
+
+        BackHandler(onBack = onCancel)
+
+        LazyColumn(
+            modifier = modifier.fillMaxSize(),
+            contentPadding = PaddingValues(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            item {
+                TextButton(onClick = onCancel) {
+                    Text("Cancel editing")
+                }
+            }
+
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Edit note", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "Update the title or transcript, then save your changes.",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+            }
+
+            item {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+                    Text(
+                        text = "Saving transcript changes regenerates the summary, tags, and action items.",
+                        modifier = Modifier.padding(16.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedTextField(
+                        value = editableTitle,
+                        onValueChange = { editableTitle = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("Title") },
+                    )
+                    Text(
+                        text = "Leave the title blank to use the title generated from the transcript.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedTextField(
+                        value = editableRawTranscript,
+                        onValueChange = { editableRawTranscript = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Raw transcript") },
+                        minLines = 10,
+                        maxLines = 16,
+                    )
+                    if (editableRawTranscript.isBlank()) {
+                        Text(
+                            text = if (note.rawTranscript.isBlank()) {
+                                "This note has no transcript. Add one or update the title to save."
+                            } else {
+                                "Transcript is required to save changes."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            }
+
+            item {
+                Button(
+                    onClick = {
+                        val regeneratedStructure = structureTranscript(cleanedTranscript)
+                        onSave(
+                            note.copy(
+                                rawTranscript = cleanedTranscript,
+                                structured = regeneratedStructure.copy(
+                                    title = cleanedTitle.ifBlank { regeneratedStructure.title },
+                                ),
+                            ),
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = canSave,
+                ) {
+                    Text("Save changes")
+                }
             }
         }
     }
@@ -592,6 +722,7 @@
     private fun NoteDetailScreen(
         note: Note,
         onBack: () -> Unit,
+        onEditNote: () -> Unit,
         modifier: Modifier = Modifier,
     ) {
         val context = LocalContext.current
@@ -666,6 +797,15 @@
             }
 
             item {
+                Button(
+                    onClick = onEditNote,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Edit note")
+                }
+            }
+
+            item {
                 OutlinedButton(
                     onClick = { shareNote(context, note) },
                     modifier = Modifier.fillMaxWidth(),
@@ -681,13 +821,10 @@
     private fun NoteCard(
         note: Note,
         onOpenNote: () -> Unit,
+        onEditNote: () -> Unit,
         onDeleteNote: (Note) -> Unit,
-        onUpdateNote: (Note) -> Unit,
     ) {
         var showDeleteConfirmation by remember { mutableStateOf(false) }
-        var showEditDialog by remember { mutableStateOf(false) }
-        var editableTitle by remember(note.id, note.structured.title) { mutableStateOf(note.structured.title) }
-        var editableRawTranscript by remember(note.id, note.rawTranscript) { mutableStateOf(note.rawTranscript) }
 
         if (showDeleteConfirmation) {
             AlertDialog(
@@ -712,65 +849,6 @@
             )
         }
 
-        if (showEditDialog) {
-            AlertDialog(
-                onDismissRequest = {
-                    editableTitle = note.structured.title
-                    editableRawTranscript = note.rawTranscript
-                    showEditDialog = false
-                },
-                title = { Text("Edit note") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedTextField(
-                            value = editableTitle,
-                            onValueChange = { editableTitle = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            label = { Text("Title") },
-                        )
-                        OutlinedTextField(
-                            value = editableRawTranscript,
-                            onValueChange = { editableRawTranscript = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Raw transcript") },
-                            minLines = 4,
-                        )
-                    }
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            val cleanedTranscript = editableRawTranscript.trim()
-                            val regeneratedStructure = structureTranscript(cleanedTranscript)
-                            val updatedNote = note.copy(
-                                rawTranscript = cleanedTranscript,
-                                structured = regeneratedStructure.copy(
-                                    title = editableTitle.trim().ifBlank { regeneratedStructure.title },
-                                ),
-                            )
-                            showEditDialog = false
-                            onUpdateNote(updatedNote)
-                        },
-                        enabled = editableRawTranscript.isNotBlank(),
-                    ) {
-                        Text("Save")
-                    }
-                },
-                dismissButton = {
-                    TextButton(
-                        onClick = {
-                            editableTitle = note.structured.title
-                            editableRawTranscript = note.rawTranscript
-                            showEditDialog = false
-                        },
-                    ) {
-                        Text("Cancel")
-                    }
-                },
-            )
-        }
-
         Card(modifier = Modifier.fillMaxWidth(), onClick = onOpenNote) {
             Column(modifier = Modifier.padding(18.dp)) {
                 Text(note.structured.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
@@ -785,7 +863,7 @@
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { showEditDialog = true }) {
+                    TextButton(onClick = onEditNote) {
                         Text("Edit")
                     }
                     TextButton(onClick = { showDeleteConfirmation = true }) {
