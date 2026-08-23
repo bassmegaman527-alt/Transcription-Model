@@ -20,7 +20,7 @@ app and selects the smallest first implementation.
 
 | Entry point | User path | Lock-screen value | App impact | Recommendation |
 | --- | --- | --- | --- | --- |
-| Static launcher shortcut, optionally pinned | Long-press the launcher icon and tap **Quick capture**; a user can also place the shortcut on the home screen for one-tap access | Not a dependable lock-screen entry; shortcut information is unavailable before the user first unlocks the device after boot | Small: shortcut XML, manifest metadata, strings/icon, and intent handling in the existing activity; no new permission or dependency | **Implement first** |
+| Static launcher shortcut, optionally pinned | Long-press the launcher icon and tap **Quick capture**; a user can also place the shortcut on the home screen for one-tap access | Not a dependable lock-screen entry; shortcut information is unavailable before the user first unlocks the device after boot | Small: shortcut resources, a no-display routing activity, and intent handling in the existing activity; no new permission or dependency | **Implement first** |
 | Quick Settings tile | Swipe to Quick Settings and tap a user-added tile | Best practical lock-screen-oriented surface, but secure devices should require unlock before showing or starting sensitive capture | Medium: `TileService`, manifest declaration, icon, activity `PendingIntent`, and user setup; no recording service is needed when the tile only opens the foreground activity | Implement as the lock-screen follow-up |
 | Home-screen widget | Tap a widget after placing it | Primarily a home-screen surface; lock-screen widget support depends on the system host and device capabilities | Medium: provider, metadata, layouts/resources, receiver lifecycle, and setup | Defer unless shortcuts prove insufficient |
 | Notification action | Tap an action in an ongoing notification | Potentially visible from the lock screen, subject to notification and privacy settings | Medium/high: notification permission on Android 13+, channel and lifecycle management, and persistent UI clutter | Do not use as the initial entry point |
@@ -45,8 +45,12 @@ The implementation PR for checklist item 2 should:
    lifecycle.
 5. Avoid starting again when capture is already active or when the same intent
    is redelivered.
-6. Reuse `MainActivity` with appropriate launch flags and warm-intent handling
-   rather than creating another activity or capture component.
+6. Route through a no-display activity with empty task affinity, then reuse
+   `MainActivity` with `NEW_TASK`, `SINGLE_TOP`, and `CLEAR_TOP` launch flags.
+   Android applies `NEW_TASK` and `CLEAR_TASK` to static shortcuts, so this
+   routing step prevents a warm shortcut launch from destroying the existing
+   app task. The routing activity must only forward the request and must not own
+   capture behavior.
 
 This first implementation improves access in two useful forms: a discoverable
 long-press action and a user-pinned one-tap home-screen action. It does not claim
