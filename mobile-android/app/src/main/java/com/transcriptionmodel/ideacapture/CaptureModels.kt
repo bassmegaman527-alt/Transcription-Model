@@ -68,11 +68,7 @@ fun structureTranscript(rawTranscript: String): StructuredNote {
         .filter { it.length > 3 }
 
     val title = rawTranscript.toMeaningfulTitle()
-
-    val summary = when {
-        rawTranscript.length <= 180 -> rawTranscript
-        else -> rawTranscript.take(177).trimEnd() + "..."
-    }
+    val summary = rawTranscript.toConciseSummary()
 
     val tags = cleanWords
         .groupingBy { it }
@@ -98,6 +94,41 @@ fun structureTranscript(rawTranscript: String): StructuredNote {
         tags = tags,
         actionItems = actionItems,
     )
+}
+
+private fun String.toConciseSummary(): String {
+    val normalizedTranscript = trim().replace(Regex("\\s+"), " ")
+    if (normalizedTranscript.isBlank()) {
+        return EMPTY_SUMMARY
+    }
+    if (normalizedTranscript.length <= MAX_SUMMARY_LENGTH) {
+        return normalizedTranscript
+    }
+
+    val leadingSentences = summarySentenceRegex
+        .findAll(normalizedTranscript)
+        .map { match -> match.value.trim() }
+        .filter { sentence -> sentence.isNotBlank() }
+        .take(MAX_SUMMARY_SENTENCES)
+        .joinToString(" ")
+
+    return leadingSentences
+        .ifBlank { normalizedTranscript }
+        .toSummaryExcerpt()
+}
+
+private fun String.toSummaryExcerpt(): String {
+    val availableLength = MAX_SUMMARY_LENGTH - SUMMARY_ELLIPSIS.length
+    val clippedSummary = take(availableLength).trimEnd()
+    val lastWordBoundary = clippedSummary.lastIndexOf(' ')
+    val summaryAtWordBoundary = when {
+        length <= availableLength -> clippedSummary
+        lastWordBoundary > 0 -> clippedSummary.take(lastWordBoundary)
+        else -> clippedSummary
+    }
+
+    return summaryAtWordBoundary
+        .trimEnd(' ', '.', '!', '?', ',', ':', ';', '-') + SUMMARY_ELLIPSIS
 }
 
 private fun String.toMeaningfulTitle(): String {
@@ -163,6 +194,12 @@ private val fillerWords = setOf(
 
 private const val MAX_TITLE_WORDS = 6
 private const val MAX_TITLE_LENGTH = 60
+private const val MAX_SUMMARY_SENTENCES = 2
+private const val MAX_SUMMARY_LENGTH = 240
+private const val SUMMARY_ELLIPSIS = "..."
+private const val EMPTY_SUMMARY = "No transcript captured."
+
+private val summarySentenceRegex = Regex("[^.!?]+[.!?]?")
 
 private val genericCaptureFallbacks = setOf(
     "quick idea captured from the prototype",
