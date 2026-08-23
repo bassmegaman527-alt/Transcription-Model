@@ -543,6 +543,7 @@
         }
 
         val visibleNotes = notes.filterBySearchQuery(searchQuery)
+        val inboxIsEmpty = notes.isEmpty()
 
         LazyColumn(
             modifier = modifier.fillMaxSize(),
@@ -598,13 +599,30 @@
             if (visibleNotes.isEmpty()) {
                 item {
                     Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(20.dp)) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
                             Text(
-                                text = if (searchQuery.isBlank()) "No notes yet" else "No matching notes.",
+                                text = if (inboxIsEmpty) "No saved notes yet" else "No notes match your search",
                                 style = MaterialTheme.typography.titleMedium,
                             )
-                            if (searchQuery.isBlank()) {
-                                Text("Start a capture to create your first idea note.")
+                            Text(
+                                if (inboxIsEmpty) {
+                                    "Capture and save an idea to create your first note. Saved notes will appear here."
+                                } else {
+                                    "Try fewer or different words, or clear the search to see all notes."
+                                },
+                            )
+                            if (inboxIsEmpty) {
+                                Button(
+                                    onClick = {
+                                        onSearchQueryChange("")
+                                        onStartCapture()
+                                    },
+                                ) {
+                                    Text("Start first capture")
+                                }
                             }
                         }
                     }
