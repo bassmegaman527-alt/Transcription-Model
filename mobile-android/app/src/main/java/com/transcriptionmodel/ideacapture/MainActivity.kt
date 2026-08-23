@@ -401,9 +401,25 @@
                 }
             }
 
-
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text("Saved data", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                        Text("Permanently remove every saved note from this device.")
+                        OutlinedButton(
+                            onClick = { showDeleteAllConfirmation = true },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Delete all notes", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
                 }
             }
+        }
+    }
 
     @Composable
     private fun CaptureScreen(
