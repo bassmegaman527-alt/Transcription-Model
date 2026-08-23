@@ -48,6 +48,7 @@
     import androidx.compose.runtime.DisposableEffect
     import androidx.compose.runtime.LaunchedEffect
     import androidx.compose.runtime.getValue
+    import androidx.compose.runtime.mutableIntStateOf
     import androidx.compose.runtime.mutableStateOf
     import androidx.compose.runtime.remember
     import androidx.compose.runtime.rememberCoroutineScope
@@ -72,12 +73,47 @@
     private val Context.notesDataStore by preferencesDataStore(name = "idea_capture_notes")
     private val notesJsonKey = stringPreferencesKey("notes_json")
     private val searchTermSeparator = Regex("\\s+")
+    private const val ACTION_QUICK_CAPTURE = "com.transcriptionmodel.ideacapture.action.QUICK_CAPTURE"
 
-    class MainActivity : ComponentActivity() {
+    class QuickCaptureActivity : ComponentActivity() {
         override fun onCreate(savedInstanceState: Bundle?) {
             super.onCreate(savedInstanceState)
+            startActivity(
+                Intent(this, MainActivity::class.java).apply {
+                    action = ACTION_QUICK_CAPTURE
+                    addFlags(
+                        Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                            Intent.FLAG_ACTIVITY_SINGLE_TOP,
+                    )
+                },
+            )
+            finish()
+        }
+    }
+
+    class MainActivity : ComponentActivity() {
+        private var quickCaptureRequestId by mutableIntStateOf(0)
+
+        override fun onCreate(savedInstanceState: Bundle?) {
+            super.onCreate(savedInstanceState)
+            handleLaunchIntent(intent)
             setContent {
-                IdeaCaptureApp()
+                IdeaCaptureApp(quickCaptureRequestId = quickCaptureRequestId)
+            }
+        }
+
+        override fun onNewIntent(intent: Intent) {
+            super.onNewIntent(intent)
+            handleLaunchIntent(intent)
+        }
+
+        private fun handleLaunchIntent(incomingIntent: Intent) {
+            if (incomingIntent.action == ACTION_QUICK_CAPTURE) {
+                quickCaptureRequestId += 1
+                setIntent(Intent(incomingIntent).apply { action = null })
+            } else {
+                setIntent(incomingIntent)
             }
         }
     }
@@ -94,7 +130,7 @@
     )
 
     @Composable
-    fun IdeaCaptureApp() {
+    fun IdeaCaptureApp(quickCaptureRequestId: Int = 0) {
         MaterialTheme(colorScheme = lightColorScheme()) {
             Surface(modifier = Modifier.fillMaxSize()) {
                 val context = LocalContext.current
@@ -105,6 +141,7 @@
                 var notes by remember { mutableStateOf(emptyList<Note>()) }
                 var inboxSearchQuery by remember { mutableStateOf("") }
                 var isSavingCapture by remember { mutableStateOf(false) }
+                var isRequestingMicrophonePermission by remember { mutableStateOf(false) }
                 var pendingCaptureConfirmation by remember { mutableStateOf<PendingCaptureConfirmation?>(null) }
                 val coroutineScope = rememberCoroutineScope()
 
@@ -147,6 +184,7 @@
                 }
 
                 fun startSpeechCapture() {
+                    isRequestingMicrophonePermission = false
                     isSavingCapture = false
                     pendingCaptureConfirmation = null
                     session = CaptureSession(
@@ -176,6 +214,7 @@
                 val microphonePermissionLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.RequestPermission(),
                 ) { isGranted ->
+                    isRequestingMicrophonePermission = false
                     if (isGranted) {
                         startSpeechCapture()
                     } else {
@@ -188,10 +227,24 @@
 
                 val requestOrStartSpeechCapture: () -> Unit = {
                     selectedTab = AppTab.Capture
-                    if (hasCapturePermissions(context)) {
-                        startSpeechCapture()
-                    } else {
-                        microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    if (
+                        !session.isRecording &&
+                        session.status != CaptureStatus.Structuring &&
+                        session.status != CaptureStatus.AwaitingConfirmation &&
+                        !isRequestingMicrophonePermission
+                    ) {
+                        if (hasCapturePermissions(context)) {
+                            startSpeechCapture()
+                        } else {
+                            isRequestingMicrophonePermission = true
+                            microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        }
+                    }
+                }
+
+                LaunchedEffect(quickCaptureRequestId) {
+                    if (quickCaptureRequestId > 0) {
+                        requestOrStartSpeechCapture()
                     }
                 }
 
