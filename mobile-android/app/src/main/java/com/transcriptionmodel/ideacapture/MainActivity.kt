@@ -688,7 +688,7 @@
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     label = { Text("Search notes") },
-                    placeholder = { Text("Search title, transcript, tags, or tasks") },
+                    placeholder = { Text("Search title, source, development, or tags") },
                 )
             }
 
@@ -1134,6 +1134,7 @@
     }
 
     private fun Note.toShareText(): String = buildString {
+        appendLine("Interpretation")
         appendLine("Title: ${structured.title}")
         appendLine("Summary: ${structured.summary}")
         appendLine("Tags: ${structured.tags.joinToString(", ")}")
@@ -1141,7 +1142,21 @@
             appendLine("Action items:")
             structured.actionItems.forEach { actionItem -> appendLine("- ${actionItem.text}") }
         }
-        appendLine("Raw transcript: $rawTranscript")
+
+        appendLine()
+        appendLine("Source")
+        appendLine("Original transcript: ${sourceTranscript.ifBlank { "No source transcript captured." }}")
+        if (rawTranscript != sourceTranscript) {
+            appendLine("Current transcript: ${rawTranscript.ifBlank { "No current transcript." }}")
+        }
+
+        if (developmentContent.isNotBlank()) {
+            appendLine()
+            appendLine("Development")
+            appendLine(developmentContent)
+        }
+
+        appendLine()
         append("Created: ${DateFormat.getDateTimeInstance().format(Date(createdAtMillis))}")
     }
 
@@ -1159,7 +1174,9 @@
     private fun Note.matchesSearchQuery(queryTerms: List<String>): Boolean {
         val searchableText = buildString {
             append(structured.title).append(' ')
+            append(sourceTranscript).append(' ')
             append(rawTranscript).append(' ')
+            append(developmentContent).append(' ')
             append(structured.summary).append(' ')
             append(structured.tags.joinToString(" ")).append(' ')
             append(structured.actionItems.joinToString(" ") { it.text })
