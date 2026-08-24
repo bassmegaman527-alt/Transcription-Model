@@ -71,9 +71,7 @@ class AndroidSpeechTranscriber(
 
                 override fun onBufferReceived(buffer: ByteArray?) = Unit
 
-                override fun onEndOfSpeech() {
-                    scheduleRestartIfNeeded(END_OF_SPEECH_RESTART_DELAY_MS)
-                }
+                override fun onEndOfSpeech() = Unit
 
                 override fun onError(error: Int) {
                     mainHandler.removeCallbacks(restartListeningRunnable)
@@ -134,7 +132,12 @@ class AndroidSpeechTranscriber(
             return
         }
 
-        scheduleRestartIfNeeded(RESTART_DELAY_MS)
+        val restartDelayMillis = if (error == null) {
+            RESULT_RESTART_DELAY_MS
+        } else {
+            RECOVERABLE_ERROR_RESTART_DELAY_MS
+        }
+        scheduleRestartIfNeeded(restartDelayMillis)
     }
 
     private fun scheduleRestartIfNeeded(delayMillis: Long) {
@@ -172,8 +175,8 @@ class AndroidSpeechTranscriber(
     }
 
     private companion object {
-        const val RESTART_DELAY_MS = 250L
-        const val END_OF_SPEECH_RESTART_DELAY_MS = 2_000L
+        const val RESULT_RESTART_DELAY_MS = 0L
+        const val RECOVERABLE_ERROR_RESTART_DELAY_MS = 250L
         const val COMPLETE_SILENCE_MS = 1_500L
         const val POSSIBLY_COMPLETE_SILENCE_MS = 750L
         const val STOP_RESULT_TIMEOUT_MS = 1_500L
