@@ -152,8 +152,6 @@ class AndroidSpeechTranscriber(
         putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
         putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, COMPLETE_SILENCE_MS)
-        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, POSSIBLY_COMPLETE_SILENCE_MS)
     }
 
     private fun Bundle.bestRecognitionResult(): String? = getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
@@ -177,8 +175,6 @@ class AndroidSpeechTranscriber(
     private companion object {
         const val RESULT_RESTART_DELAY_MS = 0L
         const val RECOVERABLE_ERROR_RESTART_DELAY_MS = 250L
-        const val COMPLETE_SILENCE_MS = 1_500L
-        const val POSSIBLY_COMPLETE_SILENCE_MS = 750L
         const val STOP_RESULT_TIMEOUT_MS = 1_500L
 
         val recoverableErrors = setOf(
