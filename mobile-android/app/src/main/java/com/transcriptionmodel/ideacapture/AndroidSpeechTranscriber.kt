@@ -76,12 +76,18 @@ class AndroidSpeechTranscriber(
                 override fun onError(error: Int) {
                     mainHandler.removeCallbacks(restartListeningRunnable)
                     isStartPending = false
-                    onErrorMessage(error.toSpeechRecognizerMessage())
                     if (pendingStopCallback != null) {
                         completePendingStop("")
                         return
                     }
-                    restartIfNeeded(error)
+                    if (error in recoverableErrors) {
+                        commitLatestPartialForRestart()
+                        restartIfNeeded(error)
+                        return
+                    }
+
+                    shouldKeepListening = false
+                    onErrorMessage(error.toSpeechRecognizerMessage())
                 }
 
                 override fun onResults(results: Bundle?) {
@@ -123,6 +129,12 @@ class AndroidSpeechTranscriber(
         val stoppedTranscript = finalTranscript.ifBlank { latestPartialTranscript }
         latestPartialTranscript = ""
         callback(stoppedTranscript)
+    }
+
+    private fun commitLatestPartialForRestart() {
+        val partialTranscript = latestPartialTranscript
+        latestPartialTranscript = ""
+        partialTranscript.takeIf { it.isNotBlank() }?.let(onFinalTranscript)
     }
 
     private fun restartIfNeeded(error: Int? = null) {

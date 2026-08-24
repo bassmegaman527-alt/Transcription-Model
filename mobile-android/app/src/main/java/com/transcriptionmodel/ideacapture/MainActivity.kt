@@ -72,7 +72,7 @@
 
     private val Context.notesDataStore by preferencesDataStore(name = "idea_capture_notes")
     private val notesJsonKey = stringPreferencesKey("notes_json")
-    private val searchTermSeparator = Regex("\\s+")
+    private val whitespaceSeparator = Regex("\\s+")
     private const val ACTION_QUICK_CAPTURE = "com.transcriptionmodel.ideacapture.action.QUICK_CAPTURE"
 
     class QuickCaptureActivity : ComponentActivity() {
@@ -156,7 +156,10 @@
                             val currentSession = sessionState.value
                             if (currentSession.isRecording) {
                                 sessionState.value = currentSession.copy(
-                                    partialTranscript = partialTranscript,
+                                    partialTranscript = transcriptContinuation(
+                                        currentSession.committedTranscript,
+                                        partialTranscript,
+                                    ),
                                     errorMessage = null,
                                 )
                             }
@@ -1164,7 +1167,7 @@
         val queryTerms = query
             .trim()
             .lowercase()
-            .split(searchTermSeparator)
+            .split(whitespaceSeparator)
             .filter { term -> term.isNotBlank() }
         if (queryTerms.isEmpty()) return this
 
@@ -1193,14 +1196,34 @@
     private fun appendTranscript(vararg transcriptParts: String): String = transcriptParts
         .map { it.trim() }
         .filter { it.isNotBlank() }
-        .fold("") { transcript, nextPart ->
-            when {
-                transcript.isBlank() -> nextPart
-                transcript.endsWith(nextPart) -> transcript
-                nextPart.startsWith(transcript) -> nextPart
-                else -> "$transcript $nextPart"
+        .fold("") { transcript, nextPart -> appendTranscriptPart(transcript, nextPart) }
+
+    private fun appendTranscriptPart(transcript: String, nextPart: String): String {
+        if (transcript.isBlank()) return nextPart
+
+        val continuation = transcriptContinuation(transcript, nextPart)
+        return if (continuation.isBlank()) transcript else "$transcript $continuation"
+    }
+
+    private fun transcriptContinuation(transcript: String, nextPart: String): String {
+        if (transcript.isBlank()) return nextPart
+
+        val transcriptWords = transcript.split(whitespaceSeparator)
+        val nextWords = nextPart.split(whitespaceSeparator)
+        val transcriptMatchKeys = transcriptWords.map { word -> word.toTranscriptMatchKey() }
+        val nextMatchKeys = nextWords.map { word -> word.toTranscriptMatchKey() }
+        val overlapWordCount = (minOf(transcriptWords.size, nextWords.size) downTo 1)
+            .firstOrNull { wordCount ->
+                val transcriptOverlap = transcriptMatchKeys.takeLast(wordCount)
+                val nextOverlap = nextMatchKeys.take(wordCount)
+                transcriptOverlap.none { key -> key.isBlank() } && transcriptOverlap == nextOverlap
             }
-        }
+            ?: 0
+        return nextWords.drop(overlapWordCount).joinToString(" ")
+    }
+
+    private fun String.toTranscriptMatchKey(): String = lowercase()
+        .trim { character -> !character.isLetterOrDigit() }
 
     private suspend fun loadSavedNotes(context: Context): List<Note> = try {
         val notesJson = context.notesDataStore.data.first()[notesJsonKey].orEmpty()
