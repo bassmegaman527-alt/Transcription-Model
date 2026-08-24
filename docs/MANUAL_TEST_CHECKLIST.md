@@ -5,7 +5,9 @@ Use this checklist for Android changes that could affect the Idea Capture user e
 ## Setup
 
 - [ ] Build the debug app with `./gradlew :mobile-android:app:assembleDebug`.
-- [ ] Install and launch the debug app.
+- [ ] Before an update-over-existing-data check, record the current note count and non-sensitive identifying details for at least two saved notes.
+- [ ] Install the debug build without clearing app storage or uninstalling the prior build when running the update check.
+- [ ] Launch the debug app.
 - [ ] Confirm the app opens without crashing.
 - [ ] Record the Android device or emulator and API level used.
 
@@ -68,11 +70,59 @@ for any failure.
 - [ ] Deleting one note requires confirmation and removes only that note.
 - [ ] Closing and reopening the app retains saved edits and deletions.
 
+## Expandable Idea persistence and regression
+
+Use non-sensitive, distinctive marker words for Source, Current transcript, and
+Development so each stored field can be recognized without exposing private
+content. Complete this section in order and do not clear app data between steps.
+
+### Existing-note compatibility
+
+- [ ] After updating without clearing storage, the recorded pre-existing note count is unchanged.
+- [ ] The recorded notes retain their title, summary, tags, action items, transcript, timestamp, duration, and newest-first order.
+- [ ] A pre-existing note retains its displayed Source, or adopts its prior transcript as Source when upgrading from a pre-Source build, and shows empty Development when none was added.
+- [ ] Fully close and reopen the app; the same notes return without loss or duplication.
+
+### Source preservation and Development
+
+- [ ] From the ordinary app icon, save one meaningful capture containing a unique Source marker; Inbox adds exactly one note.
+- [ ] Open the note and record its displayed Source, Interpretation title, summary, tags, action items, timestamp, and duration.
+- [ ] Edit the Current transcript to remove the Source marker and add a different marker; add multiline Development with a third marker; save.
+- [ ] Detail still shows the original Source exactly as recorded, Current transcript shows the edited text, and Development shows the saved additions.
+- [ ] Interpretation reflects the Current transcript while the note count, timestamp, and duration remain unchanged.
+- [ ] Fully close and reopen the app; Source, Current transcript, Interpretation, and Development all return without duplication.
+- [ ] Edit only Development and save; Source, Current transcript, and Interpretation remain unchanged.
+- [ ] Change Development and cancel editing; the previously saved Development and Source remain unchanged.
+
+### Search and sharing
+
+- [ ] Search for the Source marker removed from Current transcript; the note still appears.
+- [ ] Search for the Current transcript marker; the note appears.
+- [ ] Search for the Development marker; the note appears.
+- [ ] Search with one Source term and one Development term; all-term matching returns the note.
+- [ ] Share the note; shared text labels Interpretation and Source, includes Original and Current transcript separately, and includes Development.
+- [ ] Share a note with no Development and an unchanged transcript; shared text omits empty Development and duplicate Current transcript sections.
+- [ ] Clear all Development, save, fully close and reopen, and confirm Development remains empty while Source and Current transcript remain unchanged.
+- [ ] The cleared Development marker no longer returns the note in search.
+
+### Capture-entry and deletion regression
+
+- [ ] Complete the Capture section once through the ordinary app-icon flow, including permission grant/denial and blank-capture behavior.
+- [ ] Complete the External capture access shared lifecycle once for the launcher shortcut and once for the Quick Settings tile.
+- [ ] One meaningful Stop from each of the three entry paths creates exactly one new note; reopening the app creates no duplicates.
+- [ ] Delete a different single note; the Source-preservation test note and every other note remain unchanged after reopen.
+- [ ] Complete the About and delete-all section; reopen to confirm the Inbox stays empty, then save one new capture successfully.
+
 ## Note details and sharing
 
-- [ ] Opening a note reveals its raw transcript and any action items.
+- [ ] Opening a note visibly separates Source, Interpretation, and Development.
+- [ ] When Current transcript differs from Source, both are labeled and readable.
+- [ ] Interpretation includes the title, summary, tags, and action items.
+- [ ] Development shows saved content or the **No development added yet.** empty state.
 - [ ] **Share** opens the Android share sheet.
-- [ ] Shared text includes title, summary, tags, raw transcript, and created time.
+- [ ] Shared text labels Interpretation and Source and includes title, summary, tags, Original transcript, and created time.
+- [ ] Shared text includes Current transcript only when it differs from Source.
+- [ ] Shared text includes Development only when content has been saved.
 - [ ] Shared text includes action items when the note has them.
 
 ## About and delete all
