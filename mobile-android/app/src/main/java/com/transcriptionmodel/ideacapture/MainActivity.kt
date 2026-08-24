@@ -924,6 +924,11 @@
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
+                        text = "Interpretation title",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
                         text = note.structured.title,
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
@@ -936,19 +941,77 @@
             }
 
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Summary", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(note.structured.summary, style = MaterialTheme.typography.bodyLarge)
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("Source", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = "The original captured transcript, preserved as recorded.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            text = note.sourceTranscript.ifBlank { "No source transcript captured." },
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+
+                        if (note.rawTranscript != note.sourceTranscript) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Current transcript",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                text = "Edited transcript used for the current interpretation.",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            Text(
+                                text = note.rawTranscript.ifBlank { "No current transcript." },
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                        }
+                    }
                 }
             }
 
-            if (note.structured.tags.isNotEmpty()) {
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = "Interpretation",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = "Generated details from the current transcript.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+
+                        Text("Summary", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(note.structured.summary, style = MaterialTheme.typography.bodyLarge)
+
                         Text("Tags", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            note.structured.tags.forEach { tag ->
-                                AssistChip(onClick = {}, label = { Text(tag) })
+                        if (note.structured.tags.isEmpty()) {
+                            Text("No tags.")
+                        } else {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                note.structured.tags.forEach { tag ->
+                                    AssistChip(onClick = {}, label = { Text(tag) })
+                                }
+                            }
+                        }
+
+                        Text("Action items", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        if (note.structured.actionItems.isEmpty()) {
+                            Text("No action items.")
+                        } else {
+                            note.structured.actionItems.forEach { actionItem ->
+                                Text("• ${actionItem.text}")
                             }
                         }
                     }
@@ -956,24 +1019,24 @@
             }
 
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Raw transcript", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        text = note.rawTranscript.ifBlank { "No transcript captured." },
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                }
-            }
-
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Action items", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    if (note.structured.actionItems.isEmpty()) {
-                        Text("No action items.")
-                    } else {
-                        note.structured.actionItems.forEach { actionItem ->
-                            Text("• ${actionItem.text}")
-                        }
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = "Development",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = "Your notes and additions after the original capture.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            text = note.developmentContent.ifBlank { "No development added yet." },
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
                     }
                 }
             }
