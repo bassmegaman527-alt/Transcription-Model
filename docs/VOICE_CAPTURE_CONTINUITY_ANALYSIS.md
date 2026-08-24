@@ -2,15 +2,14 @@
 
 Issue #65 aims to keep an intentional capture logically active until the user
 presses **Stop**, even when Android ends an internal recognition request during
-a natural thinking pause. This document records the current lifecycle, the
-device-dependent boundary that must be measured, and the smallest recommended
-first implementation.
+a natural thinking pause. This document records the item 1 baseline lifecycle,
+the device-dependent boundary that was measured, and the decisions that
+followed.
 
-This analysis does not change recognition behavior. Physical-device results
-must be recorded on the pull request or Issue #65 before checklist item 1 is
-considered verified.
+Item 1 did not change recognition behavior. Its physical-device result was
+reported before the checklist item was marked verified.
 
-## Current implementation
+## Item 1 baseline implementation
 
 All three capture entry points reuse `AndroidSpeechTranscriber`:
 
@@ -25,7 +24,7 @@ across later recognition requests. Explicit Stop combines the committed text,
 the last UI partial, and the transcriber's pending result before saving exactly
 one Idea.
 
-The transcriber currently requests:
+The item 1 baseline transcriber requested:
 
 - free-form speech in the device locale;
 - partial results and one best result;
@@ -40,7 +39,7 @@ are rarely appropriate outside segmented sessions.
 
 ## Recognition lifecycle and gap locations
 
-The current lifecycle is:
+The item 1 baseline lifecycle was:
 
 1. Start sets `shouldKeepListening`, creates the recognizer if needed, and
    calls `startListening()`.
@@ -66,9 +65,9 @@ This creates two important timing paths:
 | Custom endpointing is honored | A pause near or above the recognizer's interpretation of the 750/1,500 ms hints can end the request | Ordinary thinking pauses are more likely to cross an internal boundary. |
 | Custom endpointing is ignored | The recognition service selects its own endpoint | Pause behavior varies by device, service version, language, network state, and whether recognition is local or remote. |
 
-The Capture screen remains in `CaptureStatus.Recording` across a normal
-`onEndOfSpeech()` boundary, so the visible recording state can remain active
-while the recognizer is not yet ready for resumed speech.
+In the baseline, the Capture screen remained in `CaptureStatus.Recording`
+across a normal `onEndOfSpeech()` boundary, so the visible recording state
+could remain active while the recognizer was not yet ready for resumed speech.
 
 ## Transcript continuity constraints
 
@@ -190,3 +189,66 @@ no busy-error loop, retain every earlier segment exactly once, stop promptly,
 and save exactly one Idea. Silence tuning or segmented recognition should only
 proceed through their later checklist items after this smaller change is
 measured.
+
+## Segmented recognition decision after items 2–3
+
+Items 2 and 3 implemented the two smaller API 26+ changes recommended above:
+
+- recognition now restarts only after a terminal result or error, with no
+  fixed delay after a normal result; and
+- the custom 750/1,500 ms silence hints were removed so the active recognizer
+  uses its endpointing defaults.
+
+Physical-device comparison after each change was reported as passing without
+issues. The tested pause matrix did not establish a remaining continuity
+problem or a measurable benefit that would justify a second API 33+ path.
+
+### Decision
+
+Do **not** implement segmented recognition for Issue #65 item 4. Preserve the
+current terminal-callback restart flow for every supported Android version.
+
+This is a conditional compatibility decision, not a claim that segmented
+recognition has no value on any device:
+
+- `EXTRA_SEGMENTED_SESSION`, `onSegmentResults()`, and
+  `onEndOfSegmentedSession()` begin at API 33, while the app supports API 26+;
+- segmented-session support depends on the installed recognition service and
+  the request may have no effect;
+- `checkRecognitionSupport()` can itself fail with
+  `ERROR_CANNOT_CHECK_SUPPORT`;
+- a segmented request must also set the extra named as its session type, which
+  would reintroduce endpointing configuration or require an out-of-scope audio
+  source; and
+- segment callbacks would need to coexist with the ordinary result/error path
+  without committing the same words twice or changing explicit Stop behavior.
+
+Adding that branching and fallback logic without an observed continuity gap
+would increase API- and recognizer-specific risk without a demonstrated user
+benefit.
+
+### Reconsideration triggers
+
+Reevaluate segmented recognition only when at least one of these conditions is
+documented with non-sensitive physical-device evidence:
+
+- a repeatable 2–5-second pause gap or first-word clipping remains after the
+  current restart and default-endpointing changes;
+- a recognizer or Android update creates a repeatable regression on a supported
+  device;
+- multiple important devices or recognition services show the same limitation;
+  or
+- a controlled API 33+ comparison shows a clear improvement that outweighs the
+  dual-path complexity.
+
+A future segmented experiment must remain one focused PR and must:
+
+1. gate segmented APIs to API 33+ and keep the existing API 26–32 path;
+2. treat failed, unavailable, ignored, or callback-free support as a fallback
+   to ordinary recognition rather than a capture failure;
+3. feed segment results through the existing committed-transcript path with
+   duplicate protection;
+4. preserve explicit Stop, no recording before Start or after Stop, and exactly
+   one saved Idea; and
+5. repeat the pause, entry-point, permission, transcript, and persistence
+   regression matrix before adoption.
