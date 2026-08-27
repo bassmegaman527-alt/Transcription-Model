@@ -1419,7 +1419,7 @@
         context.startActivity(Intent.createChooser(shareIntent, "Share note"))
     }
 
-    private fun Note.toShareText(): String = buildString {
+    internal fun Note.toShareText(): String = buildString {
         appendLine("Interpretation")
         appendLine("Title: ${structured.title}")
         appendLine("Summary: ${structured.summary}")
@@ -1446,7 +1446,7 @@
         append("Created: ${DateFormat.getDateTimeInstance().format(Date(createdAtMillis))}")
     }
 
-    private fun List<Note>.filterBySearchQuery(query: String): List<Note> {
+    internal fun List<Note>.filterBySearchQuery(query: String): List<Note> {
         val queryTerms = query
             .trim()
             .lowercase()

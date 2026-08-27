@@ -144,6 +144,56 @@ class VoiceContinuationTest {
         assertEquals("Repeated thought\n\nRepeated thought", nextAttempt.updatedNote.developmentContent)
     }
 
+    @Test
+    fun `keeps distinct intentional continuations in chronological order`() {
+        val before = note(id = "before", developmentContent = "Before", createdAtMillis = 3_000L)
+        val target = note(id = "target", developmentContent = "Typed starting point", createdAtMillis = 2_000L)
+        val after = note(id = "after", developmentContent = "After", createdAtMillis = 1_000L)
+        val notes = listOf(before, target, after)
+
+        val first = appliedResult(
+            notes = notes,
+            targetNoteId = target.id,
+            expectedDevelopmentContent = target.developmentContent,
+            stoppedTranscript = "First spoken addition",
+        )
+        val second = appliedResult(
+            notes = first.notes,
+            targetNoteId = target.id,
+            expectedDevelopmentContent = first.updatedNote.developmentContent,
+            stoppedTranscript = "Second spoken addition",
+        )
+
+        val expectedDevelopment =
+            "Typed starting point\n\nFirst spoken addition\n\nSecond spoken addition"
+        assertEquals(expectedDevelopment, second.updatedNote.developmentContent)
+        assertEquals(target.copy(developmentContent = expectedDevelopment), second.updatedNote)
+        assertEquals(listOf("before", "target", "after"), second.notes.map { note -> note.id })
+        assertEquals(notes.size, second.notes.size)
+        assertEquals(before, second.notes[0])
+        assertEquals(after, second.notes[2])
+    }
+
+    @Test
+    fun `continued Development is immediately searchable and shareable`() {
+        val target = note(id = "target", developmentContent = "Typed starting point")
+        val applied = appliedResult(
+            notes = listOf(target),
+            targetNoteId = target.id,
+            expectedDevelopmentContent = target.developmentContent,
+            stoppedTranscript = "Cobalt roadmap checkpoint",
+        )
+
+        assertEquals(
+            listOf(applied.updatedNote),
+            applied.notes.filterBySearchQuery("cobalt checkpoint"),
+        )
+        val sharedText = applied.updatedNote.toShareText()
+        assertTrue(sharedText.contains("Development"))
+        assertTrue(sharedText.contains("Typed starting point"))
+        assertTrue(sharedText.contains("Cobalt roadmap checkpoint"))
+    }
+
     private fun appliedResult(
         notes: List<Note>,
         targetNoteId: String,
