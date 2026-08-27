@@ -113,6 +113,65 @@ content. Complete this section in order and do not clear app data between steps.
 - [ ] Delete a different single note; the Source-preservation test note and every other note remain unchanged after reopen.
 - [ ] Complete the About and delete-all section; reopen to confirm the Inbox stays empty, then save one new capture successfully.
 
+## Voice capture continuity regression
+
+Run this section as the final Issue #65 physical-device pass after installing
+the current PR build without clearing app data. Record the device model, Android
+and API version, active speech-recognition service when visible, network state,
+and tested commit in the pull request. Keep any notes that still need to be
+preserved until the final delete-all check.
+
+Use fixed, non-sensitive marker phrases so missing or repeated words are easy to
+spot. Say **alpha orchard** before a pause and **bravo harbor** after it. For a
+second and third pause, continue with **charlie meadow** and **delta river**.
+Recognizer punctuation and capitalization may vary, but each marker word should
+remain present in order and should not be duplicated.
+
+### Ordinary Capture pause matrix
+
+Start a new recording from the ordinary Capture screen for each trial. Repeat
+each trial three times. Check a row only when every repetition remains visibly
+**Listening now** until Stop, detects resumed speech promptly, retains the
+earlier markers, does not consistently clip the first resumed marker, contains
+no repeated boundary words or segments, stops promptly, and saves exactly one
+new Idea.
+
+- [ ] Speak the marker phrases continuously with no deliberate pause.
+- [ ] Pause about 0.5-1 second between **alpha orchard** and **bravo harbor**.
+- [ ] Pause about 2 seconds between **alpha orchard** and **bravo harbor**.
+- [ ] Pause about 3 seconds between **alpha orchard** and **bravo harbor**.
+- [ ] Pause about 5 seconds between **alpha orchard** and **bravo harbor**.
+- [ ] Use repeated thinking pauses of about 1-3 seconds between all four marker phrases in one capture.
+- [ ] After a 2-second pause, resume with **bravo** spoken quietly, then say **harbor** normally.
+- [ ] After a 2-second pause, resume with **bravo harbor** at a normal/loud volume.
+- [ ] Press **Stop recording** once while speech is active; it returns promptly and saves one complete Idea without restarting capture.
+- [ ] Press **Stop recording** once immediately after a 3-5-second pause; it returns promptly and saves one Idea without adding duplicate text.
+
+### Entry points and repeated captures
+
+- [ ] Opening the ordinary app icon shows Capture without starting the microphone; tapping **Start recording** starts exactly one capture.
+- [ ] From the pinned launcher **Quick capture** shortcut, complete a representative 2-3-second pause trial; Stop saves exactly one Idea.
+- [ ] From the Quick Settings **Quick capture** tile, complete a representative 2-3-second pause trial; Stop saves exactly one Idea.
+- [ ] Complete two back-to-back ordinary captures without force-closing the app; each Stop adds exactly one Idea and the first Idea remains unchanged.
+- [ ] Save one Idea from each entry point in sequence, then reopen from the ordinary icon; the note count has increased by exactly three and no external action is replayed.
+- [ ] Fully close and reopen the app after the repeated captures; all saved Ideas return once, in newest-first order, with no duplicates.
+
+### Permission and recognition-error paths
+
+- [ ] Reset microphone permission in system settings, return to the app, tap **Start recording**, and deny permission; no capture starts, no Idea is saved, and the permission error is visible.
+- [ ] Tap **Start recording** again and grant permission; listening starts exactly once and Stop saves exactly one Idea.
+- [ ] During the longer and repeated-pause trials, any normal internal recognition boundary stays **Listening now** and does not display **Listening interrupted**.
+- [ ] If the active recognition service reports a genuine network, server, audio, or availability failure, the app visibly reports the interruption instead of silently appearing active. Record the error category without private transcript content. Do not disable or uninstall system components solely to force this check.
+
+### Existing Idea regression after continuity trials
+
+- [ ] Complete **Existing-note compatibility** and confirm update-over-existing-data and full-reopen persistence without loss or duplication.
+- [ ] Complete **Source preservation and Development** and confirm editing does not change the original Source or create another Idea.
+- [ ] Complete **Search and sharing** and confirm Source, Current transcript, and Development remain searchable and shared with the expected labels.
+- [ ] Complete **Note details and sharing** and confirm all saved Idea sections remain readable and shareable.
+- [ ] Delete one selected Idea, fully reopen the app, and confirm only that Idea was removed.
+- [ ] Complete **About and delete all** last, reopen to confirm the Inbox remains empty, then save one new capture successfully.
+
 ## Note details and sharing
 
 - [ ] Opening a note visibly separates Source, Interpretation, and Development.
