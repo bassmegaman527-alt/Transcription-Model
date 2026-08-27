@@ -172,6 +172,86 @@ new Idea.
 - [ ] Delete one selected Idea, fully reopen the app, and confirm only that Idea was removed.
 - [ ] Complete **About and delete all** last, reopen to confirm the Inbox remains empty, then save one new capture successfully.
 
+## Continue an Idea by voice regression
+
+Run this section in order as the final Issue #72 physical-device pass. Install
+the current PR build without clearing app data. Use only non-sensitive marker
+phrases, and keep the test Ideas until the persistence, utility, and entry-point
+checks are complete.
+
+### Test record and baseline
+
+- [ ] Record the device model, Android and API version, active speech-recognition service when visible, network state, tested commit, tester, and date in the pull request.
+- [ ] Confirm the pinned launcher **Quick capture** shortcut and Quick Settings **Quick capture** tile are available, then record the starting Inbox count and newest-first order.
+- [ ] Create or select Idea A with empty Development. Record its title, Source, Current transcript, Interpretation, timestamp, duration, Inbox position, and the starting note count.
+- [ ] Create or select Idea B with typed Development containing **typed cedar**. Record the same non-Development fields, Inbox position, note count, and exact Development.
+
+### Ordered successful continuation pass
+
+1. From Idea A detail, tap **Continue by voice**.
+   - [ ] Capture identifies Idea A as the continuation target before recording; no new Idea is created and the microphone does not start until **Start continuation** is tapped.
+   - [ ] Start, say **first lantern**, and tap **Stop recording** once. The app returns to Idea A detail and Development contains the recognized phrase once.
+   - [ ] Idea A's recorded non-Development fields, Inbox position, and the total note count remain unchanged.
+2. From Idea B detail, start a continuation, say **second maple**, and stop once.
+   - [ ] Development preserves **typed cedar**, then appends the recognized phrase after a blank line; no other field, note, or Inbox position changes.
+3. Continue Idea B again, say **third orbit**, and stop once.
+   - [ ] Development remains in chronological order as **typed cedar**, **second maple**, then **third orbit**, with blank-line separators and no duplicated segment.
+4. Continue Idea B once more for the pause and volume trial.
+   - [ ] Say **alpha orchard**, pause about 2-3 seconds, resume quietly with **bravo harbor**, pause again, then say **charlie meadow** at normal/loud volume. Capture stays visibly active until Stop and retains every marker in order.
+   - [ ] Double-tap **Stop recording** quickly. The continuation is applied exactly once, returns to Idea B detail, and does not restart capture or create an Idea.
+
+### Ordered recovery and failure pass
+
+1. Open continuation mode for Idea A without starting.
+   - [ ] Tap **Discard continuation**. The app returns to Idea A detail, stops no unrelated capture, and changes no stored field or note count.
+2. Open continuation mode for Idea A, start listening, and speak a disposable marker.
+   - [ ] Use system Back or **Discard continuation** while listening. The microphone stops, no spoken text is applied, and retrying later starts a fresh transcript.
+3. Reset microphone permission in system settings, return to Idea A, and open continuation mode.
+   - [ ] Deny permission after **Start continuation**. A continuation-specific error is visible; Development and note count remain unchanged.
+   - [ ] Retry and grant permission. Listening starts exactly once, and a meaningful Stop applies exactly one continuation to Idea A.
+4. Start another continuation and remain silent until Stop.
+   - [ ] A blank result, or the literal recognizer placeholder **No speech was recognized.**, is not applied. The app offers retry/return recovery and leaves the Idea and note count unchanged.
+5. Exercise only naturally available recognition failures.
+   - [ ] If the service reports a network, server, audio, or availability failure, the error is visible and no continuation is applied. Otherwise record **not observed**; do not disable or uninstall system components to force an error.
+6. Confirm the automated stale/missing-target safety coverage.
+   - [ ] `VoiceContinuationTest` passes its missing-target, changed-Development, and repeated-callback cases. Do not delete or corrupt user data solely to reproduce those states on-device.
+
+### Persistence and existing Idea utilities
+
+- [ ] Fully close and reopen the app. Ideas A and B return once, in the same relative order, with all continued Development in chronological order and no duplicate note or segment.
+- [ ] Open both details; Source, Current transcript, Interpretation, timestamp, and duration still match the recorded baselines.
+- [ ] Search for a unique continuation marker; only the expected Idea appears immediately after continuation and again after full reopen.
+- [ ] Share the continued Idea; the preview labels and includes Development once and preserves the existing Interpretation, Source, and Current transcript rules.
+- [ ] Edit only Development and save; detail, search, sharing, and full reopen show the edit without changing any recorded non-Development field or creating a note.
+- [ ] Clear Development on one disposable test Idea and save; full reopen keeps it empty while all non-Development fields remain unchanged.
+- [ ] Delete one disposable test Idea, fully reopen, and confirm only that Idea was removed.
+
+### New-Idea entry-point regression
+
+Record the Inbox count immediately before each entry. Use a different marker for
+each capture and Stop once after meaningful speech.
+
+1. Ordinary Capture
+   - [ ] Opening the app normally and tapping **Start recording** shows ordinary Capture, not continuation mode, and Stop increases the note count by exactly one.
+2. Pinned launcher **Quick capture**
+   - [ ] Invoking the shortcut starts ordinary Quick capture exactly once, never shows a continuation target, and Stop increases the note count by exactly one.
+3. Quick Settings **Quick capture**
+   - [ ] Invoking the tile starts ordinary Quick capture exactly once, never shows a continuation target, and Stop increases the note count by exactly one.
+4. Final reopen
+   - [ ] Fully close and reopen the app. Exactly the three new Ideas return once in newest-first order, no external action is replayed, and no prior Idea received their transcripts as Development.
+
+### Final destructive utility check
+
+- [ ] Open **About**, start **Delete all notes**, and cancel. Every Idea remains present.
+- [ ] Start **Delete all notes** again and confirm. Fully close and reopen the app; the Inbox remains empty.
+- [ ] Save one new ordinary capture after delete-all; exactly one new Idea appears and no continuation target is active.
+
+### Final Issue #72 result
+
+- [ ] Every required check above is complete or has an explicit safe **not observed** note, with no private transcript content in evidence.
+- [ ] Record the overall result as **PASS**, **FAIL**, or **BLOCKED** in the pull request, including any failed step and a non-sensitive screenshot or error category when useful.
+- [ ] Mark Issue #72 item 6 complete only after the ordered pass succeeds on a physical device.
+
 ## Note details and sharing
 
 - [ ] Opening a note visibly separates Source, Interpretation, and Development.
