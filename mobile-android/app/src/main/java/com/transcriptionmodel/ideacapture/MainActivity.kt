@@ -135,6 +135,10 @@
         val expectedDevelopmentContent: String,
     )
 
+    private data class PendingMicrophonePermissionRequest(
+        val continuationAttemptId: String?,
+    )
+
     @Composable
     fun IdeaCaptureApp(quickCaptureRequestId: Int = 0) {
         MaterialTheme(colorScheme = lightColorScheme()) {
@@ -147,9 +151,12 @@
                 var notes by remember { mutableStateOf(emptyList<Note>()) }
                 var selectedNoteId by remember { mutableStateOf<String?>(null) }
                 var continuationTarget by remember { mutableStateOf<ContinuationCaptureTarget?>(null) }
+                var continuationRecoveryMessage by remember { mutableStateOf<String?>(null) }
                 var inboxSearchQuery by remember { mutableStateOf("") }
                 var isSavingCapture by remember { mutableStateOf(false) }
-                var isRequestingMicrophonePermission by remember { mutableStateOf(false) }
+                var pendingMicrophonePermissionRequest by remember {
+                    mutableStateOf<PendingMicrophonePermissionRequest?>(null)
+                }
                 var pendingCaptureConfirmation by remember { mutableStateOf<PendingCaptureConfirmation?>(null) }
                 val coroutineScope = rememberCoroutineScope()
 
@@ -188,14 +195,16 @@
                         onErrorMessage = { message ->
                             val currentSession = sessionState.value
                             if (currentSession.isRecording) {
-                                sessionState.value = currentSession.copy(errorMessage = message)
+                                sessionState.value = currentSession.copy(
+                                    status = CaptureStatus.Failed,
+                                    errorMessage = message,
+                                )
                             }
                         },
                     )
                 }
 
                 fun startSpeechCapture() {
-                    isRequestingMicrophonePermission = false
                     isSavingCapture = false
                     pendingCaptureConfirmation = null
                     session = CaptureSession(
@@ -223,31 +232,68 @@
                     pendingCaptureConfirmation = null
                 }
 
+                fun discardContinuationAndNavigate(
+                    destinationTab: AppTab = AppTab.Inbox,
+                    recoveryMessage: String? = null,
+                ) {
+                    val targetNoteId = continuationTarget?.noteId
+                    speechTranscriber.cancel()
+                    continuationTarget = null
+                    isSavingCapture = false
+                    pendingCaptureConfirmation = null
+                    session = CaptureSession()
+                    selectedNoteId = if (
+                        destinationTab == AppTab.Inbox &&
+                        targetNoteId != null &&
+                        notes.any { note -> note.id == targetNoteId }
+                    ) {
+                        targetNoteId
+                    } else {
+                        null
+                    }
+                    selectedTab = destinationTab
+                    continuationRecoveryMessage = recoveryMessage
+                }
+
                 val microphonePermissionLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.RequestPermission(),
-                ) { isGranted ->
-                    isRequestingMicrophonePermission = false
+                ) permissionResult@ { isGranted ->
+                    val permissionRequest = pendingMicrophonePermissionRequest
+                        ?: return@permissionResult
+                    pendingMicrophonePermissionRequest = null
+                    val requestIsStillActive = permissionRequest.continuationAttemptId?.let { attemptId ->
+                        continuationTarget?.attemptId == attemptId
+                    } ?: (continuationTarget == null)
+                    if (!requestIsStillActive) return@permissionResult
+
                     if (isGranted) {
                         startSpeechCapture()
                     } else {
                         session = CaptureSession(
                             status = CaptureStatus.Failed,
-                            errorMessage = "Microphone permission is required. Grant it, then tap Start again.",
+                            errorMessage = if (permissionRequest.continuationAttemptId == null) {
+                                "Microphone permission is required. Grant it, then tap Start again."
+                            } else {
+                                "Microphone permission was denied. No continuation was saved. " +
+                                    "Grant it and retry, or return to the Idea."
+                            },
                         )
                     }
                 }
 
                 fun canStartSpeechCapture(): Boolean =
-                        !session.isRecording &&
-                            session.status != CaptureStatus.Structuring &&
-                            session.status != CaptureStatus.AwaitingConfirmation &&
-                            !isRequestingMicrophonePermission
+                    !session.isRecording &&
+                        session.status != CaptureStatus.Structuring &&
+                        session.status != CaptureStatus.AwaitingConfirmation &&
+                        pendingMicrophonePermissionRequest == null
 
                 fun requestPermissionOrStartSpeechCapture() {
                     if (hasCapturePermissions(context)) {
                         startSpeechCapture()
                     } else {
-                        isRequestingMicrophonePermission = true
+                        pendingMicrophonePermissionRequest = PendingMicrophonePermissionRequest(
+                            continuationAttemptId = continuationTarget?.attemptId,
+                        )
                         microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                     }
                 }
@@ -263,21 +309,44 @@
 
                 val requestOrRetryContinuation: () -> Unit = {
                     selectedTab = AppTab.Capture
-                    if (continuationTarget != null && canStartSpeechCapture()) {
-                        requestPermissionOrStartSpeechCapture()
+                    val target = continuationTarget
+                    val targetNote = target?.let { activeTarget ->
+                        notes.firstOrNull { note -> note.id == activeTarget.noteId }
+                    }
+                    when {
+                        target == null || !canStartSpeechCapture() -> Unit
+                        targetNote == null -> discardContinuationAndNavigate(
+                            recoveryMessage =
+                                "The target Idea is no longer available. No continuation was saved.",
+                        )
+                        targetNote.developmentContent != target.expectedDevelopmentContent ->
+                            discardContinuationAndNavigate(
+                                recoveryMessage =
+                                    "The Idea changed before retry. No continuation was saved. " +
+                                        "Review the updated Idea and try again.",
+                            )
+                        else -> {
+                            continuationTarget = target.copy(attemptId = UUID.randomUUID().toString())
+                            requestPermissionOrStartSpeechCapture()
+                        }
                     }
                 }
 
                 val requestOrStartContinuation: (String) -> Unit = { noteId ->
                     val targetNote = notes.firstOrNull { note -> note.id == noteId }
-                    selectedTab = AppTab.Capture
-                    if (targetNote != null && canStartSpeechCapture()) {
+                    if (targetNote == null) {
+                        selectedNoteId = null
+                        selectedTab = AppTab.Inbox
+                        continuationRecoveryMessage =
+                            "The selected Idea is no longer available. No continuation was started."
+                    } else if (canStartSpeechCapture()) {
                         continuationTarget = ContinuationCaptureTarget(
                             attemptId = UUID.randomUUID().toString(),
                             noteId = targetNote.id,
                             expectedDevelopmentContent = targetNote.developmentContent,
                         )
                         selectedNoteId = targetNote.id
+                        selectedTab = AppTab.Capture
                         requestPermissionOrStartSpeechCapture()
                     }
                 }
@@ -292,6 +361,19 @@
                     onDispose {
                         speechTranscriber.destroy()
                     }
+                }
+
+                continuationRecoveryMessage?.let { message ->
+                    AlertDialog(
+                        onDismissRequest = { continuationRecoveryMessage = null },
+                        title = { Text("Continuation not saved") },
+                        text = { Text(message) },
+                        confirmButton = {
+                            TextButton(onClick = { continuationRecoveryMessage = null }) {
+                                Text("OK")
+                            }
+                        },
+                    )
                 }
 
                 pendingCaptureConfirmation?.let { pendingCapture ->
@@ -340,6 +422,12 @@
                     )
                 }
 
+                BackHandler(
+                    enabled = selectedTab == AppTab.Capture && continuationTarget != null,
+                ) {
+                    discardContinuationAndNavigate()
+                }
+
                 Scaffold(
                     bottomBar = {
                         NavigationBar {
@@ -347,9 +435,13 @@
                                 NavigationBarItem(
                                     selected = selectedTab == tab,
                                     onClick = {
-                                        selectedTab = tab
-                                        if (tab != AppTab.Inbox) {
-                                            selectedNoteId = null
+                                        if (continuationTarget != null && tab != AppTab.Capture) {
+                                            discardContinuationAndNavigate(destinationTab = tab)
+                                        } else {
+                                            selectedTab = tab
+                                            if (tab != AppTab.Inbox) {
+                                                selectedNoteId = null
+                                            }
                                         }
                                     },
                                     label = { Text(tab.label) },
@@ -363,6 +455,7 @@
                         AppTab.Capture -> CaptureScreen(
                             session = session,
                             notesCount = notes.size,
+                            isContinuationMode = continuationTarget != null,
                             continuationTargetTitle = continuationTarget
                                 ?.let { target -> notes.firstOrNull { note -> note.id == target.noteId } }
                                 ?.structured
@@ -372,6 +465,9 @@
                                 requestOrStartNewSpeechCapture
                             } else {
                                 requestOrRetryContinuation
+                            },
+                            onCancelContinuation = {
+                                discardContinuationAndNavigate()
                             },
                             onStop = {
                                 if (!isSavingCapture && session.isRecording) {
@@ -407,9 +503,9 @@
                                             ) {
                                                 is ContinuationApplicationResult.Applied -> {
                                                     notes = result.notes
+                                                    continuationTarget = null
                                                     coroutineScope.launch {
                                                         saveNotes(appContext, result.notes)
-                                                        continuationTarget = null
                                                         session = CaptureSession(status = CaptureStatus.Structured)
                                                         selectedNoteId = result.updatedNote.id
                                                         selectedTab = AppTab.Inbox
@@ -426,20 +522,18 @@
                                                 }
 
                                                 ContinuationApplicationResult.TargetMissing -> {
-                                                    isSavingCapture = false
-                                                    session = CaptureSession(
-                                                        status = CaptureStatus.Failed,
-                                                        errorMessage =
-                                                            "The target Idea is no longer available. No continuation was saved.",
+                                                    discardContinuationAndNavigate(
+                                                        recoveryMessage =
+                                                            "The target Idea is no longer available. " +
+                                                                "No continuation was saved.",
                                                     )
                                                 }
 
                                                 ContinuationApplicationResult.TargetChanged -> {
-                                                    isSavingCapture = false
-                                                    session = CaptureSession(
-                                                        status = CaptureStatus.Failed,
-                                                        errorMessage =
-                                                            "The target Idea changed. No continuation was saved.",
+                                                    discardContinuationAndNavigate(
+                                                        recoveryMessage =
+                                                            "The Idea changed during capture. No continuation was saved. " +
+                                                                "Review the updated Idea and try again.",
                                                     )
                                                 }
                                             }
@@ -590,25 +684,37 @@
     private fun CaptureScreen(
         session: CaptureSession,
         notesCount: Int,
+        isContinuationMode: Boolean,
         continuationTargetTitle: String?,
         onStart: () -> Unit,
         onStop: () -> Unit,
+        onCancelContinuation: () -> Unit,
         modifier: Modifier = Modifier,
     ) {
         val statusTitle = when {
             session.status == CaptureStatus.Recording && session.errorMessage != null -> "Listening interrupted"
             session.status == CaptureStatus.Recording -> "Listening now"
+            session.status == CaptureStatus.Structuring && isContinuationMode -> "Processing continuation"
             session.status == CaptureStatus.Structuring -> "Processing recording"
             session.status == CaptureStatus.Saved || session.status == CaptureStatus.Structured -> "Saved to Inbox"
+            session.status == CaptureStatus.Failed && isContinuationMode -> "Continuation not saved"
             session.status == CaptureStatus.Failed -> "Unable to start listening"
             session.status == CaptureStatus.AwaitingConfirmation -> "Review capture"
             else -> "Ready to capture"
         }
         val statusMessage = when (session.status) {
-            CaptureStatus.Idle -> "Tap Start recording, then speak naturally."
+            CaptureStatus.Idle -> if (isContinuationMode) {
+                "Tap Start continuation, then speak naturally."
+            } else {
+                "Tap Start recording, then speak naturally."
+            }
             CaptureStatus.Recording -> session.errorMessage ?: "Speak naturally. Your words will appear below."
             CaptureStatus.Saved, CaptureStatus.Structured -> "Your note is safely saved and ready in the Inbox."
-            CaptureStatus.Structuring -> "Finishing the transcript and saving your note..."
+            CaptureStatus.Structuring -> if (isContinuationMode) {
+                "Finishing the transcript and adding it to Development..."
+            } else {
+                "Finishing the transcript and saving your note..."
+            }
             CaptureStatus.AwaitingConfirmation -> "Choose whether to save or discard this capture."
             CaptureStatus.Failed -> session.errorMessage ?: "Speech recognition could not start. Please try again."
         }
@@ -636,16 +742,16 @@
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = if (continuationTargetTitle == null) {
-                        "Tap once, speak naturally, and let the app save a structured note."
-                    } else {
+                    text = if (isContinuationMode) {
                         "Speak an addition, then stop explicitly to add it to Development."
+                    } else {
+                        "Tap once, speak naturally, and let the app save a structured note."
                     },
                     style = MaterialTheme.typography.bodyLarge,
                 )
             }
 
-            if (continuationTargetTitle != null) {
+            if (isContinuationMode) {
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -664,7 +770,7 @@
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Text(
-                                text = continuationTargetTitle,
+                                text = continuationTargetTitle ?: "Idea unavailable",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                             )
@@ -731,11 +837,29 @@
                             Text(
                                 text = when {
                                     session.isRecording -> "Stop recording"
-                                    continuationTargetTitle != null -> "Start continuation"
+                                    isContinuationMode -> "Start continuation"
                                     else -> "Start recording"
                                 },
                                 style = MaterialTheme.typography.titleLarge,
                             )
+                        }
+                        if (isContinuationMode) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            OutlinedButton(
+                                onClick = onCancelContinuation,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(
+                                    if (
+                                        session.isRecording ||
+                                        session.status == CaptureStatus.Structuring
+                                    ) {
+                                        "Discard continuation"
+                                    } else {
+                                        "Return to Idea"
+                                    },
+                                )
+                            }
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         Text("$notesCount saved notes")
