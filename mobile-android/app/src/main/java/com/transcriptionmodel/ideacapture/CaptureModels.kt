@@ -48,6 +48,55 @@ data class Note(
     }
 }
 
+internal sealed interface ContinuationApplicationResult {
+    data class Applied(
+        val notes: List<Note>,
+        val updatedNote: Note,
+    ) : ContinuationApplicationResult
+
+    data object InvalidTranscript : ContinuationApplicationResult
+    data object TargetMissing : ContinuationApplicationResult
+    data object TargetChanged : ContinuationApplicationResult
+}
+
+internal fun applyVoiceContinuation(
+    notes: List<Note>,
+    targetNoteId: String,
+    expectedDevelopmentContent: String,
+    stoppedTranscript: String,
+): ContinuationApplicationResult {
+    val normalizedTranscript = stoppedTranscript
+        .trim()
+        .replace(continuationWhitespaceRegex, " ")
+    if (normalizedTranscript.isBlank() || normalizedTranscript.isPlaceholderCaptureTranscript()) {
+        return ContinuationApplicationResult.InvalidTranscript
+    }
+
+    val targetIndex = notes.indexOfFirst { note -> note.id == targetNoteId }
+    if (targetIndex < 0) {
+        return ContinuationApplicationResult.TargetMissing
+    }
+
+    val targetNote = notes[targetIndex]
+    if (targetNote.developmentContent != expectedDevelopmentContent) {
+        return ContinuationApplicationResult.TargetChanged
+    }
+
+    val updatedDevelopmentContent = if (targetNote.developmentContent.isBlank()) {
+        normalizedTranscript
+    } else {
+        "${targetNote.developmentContent}\n\n$normalizedTranscript"
+    }
+    val updatedNote = targetNote.copy(developmentContent = updatedDevelopmentContent)
+    val updatedNotes = notes.toMutableList().apply {
+        this[targetIndex] = updatedNote
+    }
+    return ContinuationApplicationResult.Applied(
+        notes = updatedNotes,
+        updatedNote = updatedNote,
+    )
+}
+
 data class CaptureSession(
     val status: CaptureStatus = CaptureStatus.Idle,
     val startedAtMillis: Long? = null,
@@ -223,6 +272,7 @@ private const val DEFAULT_TAG = "idea"
 
 private val summarySentenceRegex = Regex("[^.!?]+[.!?]?")
 private val actionWhitespaceRegex = Regex("\\s+")
+private val continuationWhitespaceRegex = Regex("\\s+")
 private val tagWordRegex = Regex("""[\p{L}\p{N}][\p{L}\p{N}'’-]*""")
 
 private val allowedShortTags = setOf(
