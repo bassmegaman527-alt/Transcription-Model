@@ -38,6 +38,8 @@ class AndroidSpeechTranscriber(
     }
 
     fun stopAndGetPendingTranscript(onTranscriptReady: (String) -> Unit) {
+        if (pendingStopCallback != null) return
+
         shouldKeepListening = false
         isStartPending = false
         mainHandler.removeCallbacks(restartListeningRunnable)
@@ -47,10 +49,18 @@ class AndroidSpeechTranscriber(
         mainHandler.postDelayed(stopResultTimeoutRunnable, STOP_RESULT_TIMEOUT_MS)
     }
 
-    fun destroy() {
+    fun cancel() {
         shouldKeepListening = false
         isStartPending = false
+        latestPartialTranscript = ""
         pendingStopCallback = null
+        mainHandler.removeCallbacks(restartListeningRunnable)
+        mainHandler.removeCallbacks(stopResultTimeoutRunnable)
+        speechRecognizer?.cancel()
+    }
+
+    fun destroy() {
+        cancel()
         speechRecognizer?.destroy()
         speechRecognizer = null
         mainHandler.removeCallbacksAndMessages(null)
