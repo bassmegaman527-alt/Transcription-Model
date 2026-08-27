@@ -94,6 +94,18 @@ Use `$transcription-feature-implementer` for:
 
 The feature skill must inspect the current repository, scope the smallest independently mergeable change, preserve existing patterns, verify the result, and prepare one focused PR.
 
+### Pull request review
+
+Use `$transcription-pr-reviewer` for:
+- reviewing a pull request, current branch, commit, or diff
+- checking Codex-produced work against its controlling issue or checklist item
+- deciding whether a change is ready for physical-device testing or merge
+- auditing focused changes for regressions, scope drift, and validation gaps
+
+The PR-review skill must inspect current repository and GitHub evidence, trace affected behavior end to end, report concrete findings by severity, distinguish automated checks from physical-device gates, and remain inspection-only unless the user explicitly requests a follow-up mutation.
+
+If review finds feature or behavior corrections, use `$transcription-feature-implementer` after the review. If it finds a demonstrated build, runtime, permission, speech, persistence, or device failure, use `$transcription-android-debugger`.
+
 ### Debugging
 
 Use `$transcription-android-debugger` for:

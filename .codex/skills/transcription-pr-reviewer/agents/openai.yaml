@@ -1,0 +1,7 @@
+interface:
+  display_name: "Transcription PR Reviewer"
+  short_description: "Review focused Android PRs before testing"
+  default_prompt: "Use $transcription-pr-reviewer to review the latest focused pull request against its controlling issue."
+
+policy:
+  allow_implicit_invocation: true
