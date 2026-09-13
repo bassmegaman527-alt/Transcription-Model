@@ -219,6 +219,14 @@ checks are complete.
 6. Confirm the automated stale/missing-target safety coverage.
    - [ ] `VoiceContinuationTest` passes its missing-target, changed-Development, and repeated-callback cases. Do not delete or corrupt user data solely to reproduce those states on-device.
 
+### Fatal error while Stop is pending (Issue #81)
+
+- [ ] Record tested commit, device/API, recognizer when visible, network state, and PASS/FAIL/BLOCKED. Use a disposable Idea with existing Development and non-sensitive speech markers.
+- [ ] If an unrecoverable recognition error naturally occurs after **Stop recording** while processing, confirm its specific error remains visible, **Start continuation** / **Return to Idea** are available, and the microphone does not restart automatically. Otherwise record **not observed** and cite `SpeechStopTest`'s deterministic fatal-error coverage; do not disable or uninstall system components to force the timing.
+- [ ] After an observed failure, wait beyond the Stop timeout, use **Return to Idea**, then fully reopen and confirm Development, Source, Current transcript, Interpretation, timestamps, duration, count, and order are unchanged.
+- [ ] In a separate failed attempt when naturally available, use **Start continuation** from the failure screen. A fresh successful retry must append only the new attempt once, including repeated Stop taps. Otherwise record **not observed** and cite the deterministic retry test.
+- [ ] Complete the successful/repeated continuation and ordinary/launcher/Quick Settings checks in this section. These targeted checks do not replace the full Issue #72 regression pass.
+
 ### Persistence and existing Idea utilities
 
 - [ ] Fully close and reopen the app. Ideas A and B return once, in the same relative order, with all continued Development in chronological order and no duplicate note or segment.

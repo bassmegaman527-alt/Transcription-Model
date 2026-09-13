@@ -481,74 +481,88 @@
                                         status = CaptureStatus.Structuring,
                                         partialTranscript = "",
                                     )
-                                    speechTranscriber.stopAndGetPendingTranscript stop@ { pendingTranscript ->
-                                        val rawTranscript = appendTranscript(
-                                            committedTranscript,
-                                            partialTranscript,
-                                            pendingTranscript,
-                                        )
-                                        if (activeContinuationTarget != null) {
-                                            if (continuationTarget?.attemptId != activeContinuationTarget.attemptId) {
-                                                isSavingCapture = false
-                                                return@stop
-                                            }
-                                            when (
-                                                val result = applyVoiceContinuation(
-                                                    notes = notes,
-                                                    targetNoteId = activeContinuationTarget.noteId,
-                                                    expectedDevelopmentContent =
-                                                        activeContinuationTarget.expectedDevelopmentContent,
-                                                    stoppedTranscript = rawTranscript,
-                                                )
-                                            ) {
-                                                is ContinuationApplicationResult.Applied -> {
-                                                    notes = result.notes
-                                                    continuationTarget = null
-                                                    coroutineScope.launch {
-                                                        saveNotes(appContext, result.notes)
-                                                        session = CaptureSession(status = CaptureStatus.Structured)
-                                                        selectedNoteId = result.updatedNote.id
-                                                        selectedTab = AppTab.Inbox
-                                                    }
-                                                }
-
-                                                ContinuationApplicationResult.InvalidTranscript -> {
-                                                    isSavingCapture = false
-                                                    session = CaptureSession(
-                                                        status = CaptureStatus.Failed,
-                                                        errorMessage =
-                                                            "No continuation was saved. Tap Start continuation to try again.",
-                                                    )
-                                                }
-
-                                                ContinuationApplicationResult.TargetMissing -> {
-                                                    discardContinuationAndNavigate(
-                                                        recoveryMessage =
-                                                            "The target Idea is no longer available. " +
-                                                                "No continuation was saved.",
-                                                    )
-                                                }
-
-                                                ContinuationApplicationResult.TargetChanged -> {
-                                                    discardContinuationAndNavigate(
-                                                        recoveryMessage =
-                                                            "The Idea changed during capture. No continuation was saved. " +
-                                                                "Review the updated Idea and try again.",
-                                                    )
-                                                }
-                                            }
-                                        } else if (
-                                            rawTranscript.isBlank() ||
-                                            rawTranscript.isPlaceholderCaptureTranscript()
+                                    speechTranscriber.stopAndGetPendingTranscript stop@ { stopResult ->
+                                        if (activeContinuationTarget != null &&
+                                            continuationTarget?.attemptId != activeContinuationTarget.attemptId
                                         ) {
-                                            session = session.copy(status = CaptureStatus.AwaitingConfirmation)
-                                            pendingCaptureConfirmation = PendingCaptureConfirmation(
-                                                transcript = rawTranscript,
-                                                durationMillis = durationMillis,
-                                            )
-                                        } else {
-                                            saveCapture(rawTranscript, durationMillis)
+                                            isSavingCapture = false
+                                            return@stop
                                         }
+                                        stopResult.dispatch(
+                                            isContinuation = activeContinuationTarget != null,
+                                            onFailure = { message ->
+                                                isSavingCapture = false
+                                                session = CaptureSession(
+                                                    status = CaptureStatus.Failed,
+                                                    errorMessage = message,
+                                                )
+                                            },
+                                            onTranscript = { pendingTranscript ->
+                                                val rawTranscript = appendTranscript(
+                                                    committedTranscript,
+                                                    partialTranscript,
+                                                    pendingTranscript,
+                                                )
+                                                if (activeContinuationTarget != null) {
+                                                    when (
+                                                        val result = applyVoiceContinuation(
+                                                            notes = notes,
+                                                            targetNoteId = activeContinuationTarget.noteId,
+                                                            expectedDevelopmentContent =
+                                                                activeContinuationTarget.expectedDevelopmentContent,
+                                                            stoppedTranscript = rawTranscript,
+                                                        )
+                                                    ) {
+                                                        is ContinuationApplicationResult.Applied -> {
+                                                            notes = result.notes
+                                                            continuationTarget = null
+                                                            coroutineScope.launch {
+                                                                saveNotes(appContext, result.notes)
+                                                                session = CaptureSession(status = CaptureStatus.Structured)
+                                                                selectedNoteId = result.updatedNote.id
+                                                                selectedTab = AppTab.Inbox
+                                                            }
+                                                        }
+
+                                                        ContinuationApplicationResult.InvalidTranscript -> {
+                                                            isSavingCapture = false
+                                                            session = CaptureSession(
+                                                                status = CaptureStatus.Failed,
+                                                                errorMessage =
+                                                                    "No continuation was saved. Tap Start continuation to try again.",
+                                                            )
+                                                        }
+
+                                                        ContinuationApplicationResult.TargetMissing -> {
+                                                            discardContinuationAndNavigate(
+                                                                recoveryMessage =
+                                                                    "The target Idea is no longer available. " +
+                                                                        "No continuation was saved.",
+                                                            )
+                                                        }
+
+                                                        ContinuationApplicationResult.TargetChanged -> {
+                                                            discardContinuationAndNavigate(
+                                                                recoveryMessage =
+                                                                    "The Idea changed during capture. No continuation was saved. " +
+                                                                        "Review the updated Idea and try again.",
+                                                            )
+                                                        }
+                                                    }
+                                                } else if (
+                                                    rawTranscript.isBlank() ||
+                                                    rawTranscript.isPlaceholderCaptureTranscript()
+                                                ) {
+                                                    session = session.copy(status = CaptureStatus.AwaitingConfirmation)
+                                                    pendingCaptureConfirmation = PendingCaptureConfirmation(
+                                                        transcript = rawTranscript,
+                                                        durationMillis = durationMillis,
+                                                    )
+                                                } else {
+                                                    saveCapture(rawTranscript, durationMillis)
+                                                }
+                                            },
+                                        )
                                     }
                                 }
                             },
