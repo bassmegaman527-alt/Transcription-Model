@@ -188,9 +188,9 @@ checks are complete.
 
 ### Ordered successful continuation pass
 
-1. From Idea A detail, tap **Continue by voice**.
-   - [ ] Capture identifies Idea A as the continuation target before recording; no new Idea is created and the microphone does not start until **Start continuation** is tapped.
-   - [ ] Start, say **first lantern**, and tap **Stop recording** once. The app returns to Idea A detail and Development contains the recognized phrase once.
+1. With microphone permission granted, open Idea A detail and tap **Continue by voice**.
+   - [ ] Capture identifies Idea A as the continuation target and starts listening once without a second Start tap. No new Idea is created; entering detail alone must not start the microphone.
+   - [ ] Say **first lantern**, and tap **Stop recording** once. The app returns to Idea A detail and Development contains the recognized phrase once.
    - [ ] Idea A's recorded non-Development fields, Inbox position, and the total note count remain unchanged.
 2. From Idea B detail, start a continuation, say **second maple**, and stop once.
    - [ ] Development preserves **typed cedar**, then appends the recognized phrase after a blank line; no other field, note, or Inbox position changes.
@@ -202,17 +202,20 @@ checks are complete.
 
 ### Ordered recovery and failure pass
 
-1. Open continuation mode for Idea A without starting.
-   - [ ] Tap **Discard continuation**. The app returns to Idea A detail, stops no unrelated capture, and changes no stored field or note count.
-2. Open continuation mode for Idea A, start listening, and speak a disposable marker.
-   - [ ] Use system Back or **Discard continuation** while listening. The microphone stops, no spoken text is applied, and retrying later starts a fresh transcript.
-3. Reset microphone permission in system settings, return to Idea A, and open continuation mode.
-   - [ ] Deny permission after **Start continuation**. A continuation-specific error is visible; Development and note count remain unchanged.
-   - [ ] Retry and grant permission. Listening starts exactly once, and a meaningful Stop applies exactly one continuation to Idea A.
+1. With microphone permission granted, tap **Continue by voice** from Idea A detail.
+   - [ ] While listening, tap **Discard continuation**. The microphone stops, the app returns to Idea A detail, and no stored field or note count changes.
+2. Start a fresh continuation for Idea A and speak a disposable marker before each navigation trial.
+   - [ ] Use system Back while listening. The microphone stops, no spoken text is applied, and retrying later starts a fresh transcript.
+   - [ ] Repeat by selecting Inbox or About from the bottom navigation. Capture is discarded, the selected tab opens, and no unfinished continuation is applied.
+3. Reset microphone permission in system settings, return to Idea A detail, and tap **Continue by voice**.
+   - [ ] The permission request appears from this action. Deny it; a continuation-specific error is visible, the microphone remains inactive, and Development and note count remain unchanged.
+   - [ ] The failed state offers **Start continuation** and **Return to Idea**. Tap **Return to Idea** and confirm the unchanged Idea opens.
+   - [ ] Start a new continuation attempt. If permission is requested, deny it again, then tap **Start continuation** to retry. Grant permission when prompted; if Android no longer shows a prompt, grant microphone permission in system settings and retry. Listening starts exactly once, and a meaningful Stop applies exactly one continuation to Idea A.
 4. Start another continuation and remain silent until Stop.
-   - [ ] A blank result, or the literal recognizer placeholder **No speech was recognized.**, is not applied. The app offers retry/return recovery and leaves the Idea and note count unchanged.
+   - [ ] A blank result is not applied. The app offers **Start continuation** / **Return to Idea** recovery and leaves the Idea and note count unchanged.
+   - [ ] Confirm the automated invalid-transcript case rejects the prototype phrase **Quick idea captured from the prototype.** The recognizer is not expected to generate this phrase during silence; do not substitute an arbitrary error message for transcript input.
 5. Exercise only naturally available recognition failures.
-   - [ ] If the service reports a network, server, audio, or availability failure, the error is visible and no continuation is applied. Otherwise record **not observed**; do not disable or uninstall system components to force an error.
+   - [ ] If the service reports an unrecoverable network, server, audio, or availability failure, the error is visible and no continuation is applied. If no unrecoverable failure occurs, record **not observed**. Recoverable interruptions, including network timeout, may retry internally while capture remains active; do not disable or uninstall system components to force an error.
 6. Confirm the automated stale/missing-target safety coverage.
    - [ ] `VoiceContinuationTest` passes its missing-target, changed-Development, and repeated-callback cases. Do not delete or corrupt user data solely to reproduce those states on-device.
 
