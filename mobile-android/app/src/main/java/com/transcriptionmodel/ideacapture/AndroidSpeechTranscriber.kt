@@ -23,7 +23,7 @@ class AndroidSpeechTranscriber(
     private var shouldKeepListening = false
     private var isStartPending = false
     private var latestPartialTranscript = ""
-    private var pendingStopCallback: ((String) -> Unit)? = null
+    private val pendingStop = PendingSpeechStop()
 
     fun start() {
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
@@ -37,14 +37,13 @@ class AndroidSpeechTranscriber(
         startListening()
     }
 
-    fun stopAndGetPendingTranscript(onTranscriptReady: (String) -> Unit) {
-        if (pendingStopCallback != null) return
+    fun stopAndGetPendingTranscript(onTranscriptReady: (SpeechStopResult) -> Unit) {
+        if (!pendingStop.begin(onTranscriptReady)) return
 
         shouldKeepListening = false
         isStartPending = false
         mainHandler.removeCallbacks(restartListeningRunnable)
         mainHandler.removeCallbacks(stopResultTimeoutRunnable)
-        pendingStopCallback = onTranscriptReady
         speechRecognizer?.stopListening()
         mainHandler.postDelayed(stopResultTimeoutRunnable, STOP_RESULT_TIMEOUT_MS)
     }
@@ -53,7 +52,7 @@ class AndroidSpeechTranscriber(
         shouldKeepListening = false
         isStartPending = false
         latestPartialTranscript = ""
-        pendingStopCallback = null
+        pendingStop.cancel()
         mainHandler.removeCallbacks(restartListeningRunnable)
         mainHandler.removeCallbacks(stopResultTimeoutRunnable)
         speechRecognizer?.cancel()
@@ -86,8 +85,8 @@ class AndroidSpeechTranscriber(
                 override fun onError(error: Int) {
                     mainHandler.removeCallbacks(restartListeningRunnable)
                     isStartPending = false
-                    if (pendingStopCallback != null) {
-                        completePendingStop("")
+                    if (pendingStop.isPending) {
+                        completePendingStop("", error)
                         return
                     }
                     if (error in recoverableErrors) {
@@ -105,7 +104,7 @@ class AndroidSpeechTranscriber(
                     isStartPending = false
                     val finalTranscript = results?.bestRecognitionResult().orEmpty()
                     finalTranscript.takeIf { it.isNotBlank() }?.let(onFinalTranscript)
-                    if (pendingStopCallback != null) {
+                    if (pendingStop.isPending) {
                         completePendingStop(finalTranscript)
                         return
                     }
@@ -132,13 +131,12 @@ class AndroidSpeechTranscriber(
         speechRecognizer?.startListening(recognitionIntent())
     }
 
-    private fun completePendingStop(finalTranscript: String) {
-        val callback = pendingStopCallback ?: return
-        pendingStopCallback = null
+    private fun completePendingStop(finalTranscript: String, error: Int? = null) {
+        if (!pendingStop.isPending) return
         mainHandler.removeCallbacks(stopResultTimeoutRunnable)
-        val stoppedTranscript = finalTranscript.ifBlank { latestPartialTranscript }
+        val partialTranscript = latestPartialTranscript
         latestPartialTranscript = ""
-        callback(stoppedTranscript)
+        pendingStop.complete(finalTranscript, partialTranscript, error)
     }
 
     private fun commitLatestPartialForRestart() {
@@ -181,30 +179,73 @@ class AndroidSpeechTranscriber(
         ?.trim()
         ?.takeIf { it.isNotBlank() }
 
-    private fun Int.toSpeechRecognizerMessage(): String = when (this) {
-        SpeechRecognizer.ERROR_AUDIO -> "Audio recording error. Please try again."
-        SpeechRecognizer.ERROR_CLIENT -> "Speech recognition paused. Restarting."
-        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is required for speech recognition."
-        SpeechRecognizer.ERROR_NETWORK -> "Network error during speech recognition."
-        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Speech recognition network timed out."
-        SpeechRecognizer.ERROR_NO_MATCH -> "No speech recognized yet. Keep speaking."
-        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Speech recognizer is busy. Retrying."
-        SpeechRecognizer.ERROR_SERVER -> "Speech recognition service error."
-        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Listening for speech..."
-        else -> "Speech recognition error $this."
-    }
-
     private companion object {
         const val RESULT_RESTART_DELAY_MS = 0L
         const val RECOVERABLE_ERROR_RESTART_DELAY_MS = 250L
         const val STOP_RESULT_TIMEOUT_MS = 1_500L
+    }
+}
 
-        val recoverableErrors = setOf(
-            SpeechRecognizer.ERROR_CLIENT,
-            SpeechRecognizer.ERROR_NETWORK_TIMEOUT,
-            SpeechRecognizer.ERROR_NO_MATCH,
-            SpeechRecognizer.ERROR_RECOGNIZER_BUSY,
-            SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
+// Retain fallback text for ordinary captures while carrying fatal errors to continuations.
+data class SpeechStopResult(val transcript: String, val fatalErrorMessage: String? = null) {
+    internal fun dispatch(
+        isContinuation: Boolean,
+        onFailure: (String) -> Unit,
+        onTranscript: (String) -> Unit,
+    ) {
+        if (isContinuation && fatalErrorMessage != null) {
+            onFailure(fatalErrorMessage)
+        } else {
+            onTranscript(transcript)
+        }
+    }
+}
+
+// The recognizer result, error, and timeout compete for this same one-shot callback.
+internal class PendingSpeechStop {
+    private var callback: ((SpeechStopResult) -> Unit)? = null
+    val isPending: Boolean get() = callback != null
+
+    fun begin(onComplete: (SpeechStopResult) -> Unit): Boolean {
+        if (isPending) return false
+        callback = onComplete
+        return true
+    }
+
+    fun cancel() {
+        callback = null
+    }
+
+    fun complete(finalTranscript: String, partialTranscript: String = "", error: Int? = null) {
+        val onComplete = callback ?: return
+        callback = null
+        onComplete(
+            SpeechStopResult(
+                transcript = finalTranscript.ifBlank { partialTranscript },
+                fatalErrorMessage = error?.takeIf { it !in recoverableErrors }
+                    ?.toSpeechRecognizerMessage(),
+            ),
         )
     }
 }
+
+private fun Int.toSpeechRecognizerMessage(): String = when (this) {
+    SpeechRecognizer.ERROR_AUDIO -> "Audio recording error. Please try again."
+    SpeechRecognizer.ERROR_CLIENT -> "Speech recognition paused. Restarting."
+    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is required for speech recognition."
+    SpeechRecognizer.ERROR_NETWORK -> "Network error during speech recognition."
+    SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Speech recognition network timed out."
+    SpeechRecognizer.ERROR_NO_MATCH -> "No speech recognized yet. Keep speaking."
+    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Speech recognizer is busy. Retrying."
+    SpeechRecognizer.ERROR_SERVER -> "Speech recognition service error."
+    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Listening for speech..."
+    else -> "Speech recognition error $this."
+}
+
+private val recoverableErrors = setOf(
+    SpeechRecognizer.ERROR_CLIENT,
+    SpeechRecognizer.ERROR_NETWORK_TIMEOUT,
+    SpeechRecognizer.ERROR_NO_MATCH,
+    SpeechRecognizer.ERROR_RECOGNIZER_BUSY,
+    SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
+)
