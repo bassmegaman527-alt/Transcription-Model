@@ -235,6 +235,15 @@ checks are complete.
 - [ ] Double-tap Stop, fully close/reopen, and confirm no duplicate or obsolete wording. Check the continued text in detail, edit, search, and share preview.
 - [ ] Confirm ordinary Capture, pinned launcher **Quick capture**, and Quick Settings **Quick capture** each create exactly one new Idea with no inherited continuation target. Retain the Issue #81 failure/retry/return checks above.
 
+### Background ordinary voice capture
+
+- [ ] Record device/API, recognizer, tested commit, and PASS/FAIL/BLOCKED. Grant microphone and notification permissions when requested. Start an ordinary capture, switch to another app, lock the screen, then return. The same capture remains active with its prior words visible.
+- [ ] Repeat and use **Stop** in the persistent notification while the app is away. Return to the app; exactly one Idea appears in the Inbox with the expected Source, and it survives a full close/reopen. Repeat with the in-app **Stop** control and double-tap Stop; each attempt saves at most once.
+- [ ] Try the pinned launcher shortcut and Quick Settings tile during an active ordinary capture. They return to the same capture without starting a second session or changing the target.
+- [ ] Deny microphone permission, then notification permission on Android 13 or newer. Each denial shows a clear error and creates no Idea. Grant the permission in Settings and retry successfully.
+- [ ] Stop after silence. Return from another app and confirm the empty-capture dialog still offers **Save empty note** and **Discard**. Each choice applies once; no note is saved on Discard.
+- [ ] Continue an existing Idea by voice and verify its prior Development, Source, and note count follow the established continuation checks. This path must not create an ordinary Idea.
+
 ### Persistence and existing Idea utilities
 
 - [ ] Fully close and reopen the app. Ideas A and B return once, in the same relative order, with all continued Development in chronological order and no duplicate note or segment.
