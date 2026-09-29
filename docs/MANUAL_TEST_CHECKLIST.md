@@ -227,6 +227,14 @@ checks are complete.
 - [ ] In a separate failed attempt when naturally available, use **Start continuation** from the failure screen. A fresh successful retry must append only the new attempt once, including repeated Stop taps. Otherwise record **not observed** and cite the deterministic retry test.
 - [ ] Complete the successful/repeated continuation and ordinary/launcher/Quick Settings checks in this section. These targeted checks do not replace the full Issue #72 regression pass.
 
+### Final Stop wording (Issue #83)
+
+- [ ] Record tested commit, device/API, recognizer when visible, network state, and PASS/FAIL/BLOCKED. Use disposable Ideas and non-sensitive markers.
+- [ ] In ordinary Capture, stop while partial wording is visible. If the recognizer corrects, shortens, or extends it in the final result, confirm the saved Source contains only the final active-segment wording. If no correction appears, record **not observed** and cite the deterministic `SpeechStopTest` cases.
+- [ ] Repeat after a pause with earlier committed words, then continue an Idea with typed Development. Earlier words remain in order; the continuation appears once after a blank line, and every other Idea field, count, and order remain unchanged.
+- [ ] Double-tap Stop, fully close/reopen, and confirm no duplicate or obsolete wording. Check the continued text in detail, edit, search, and share preview.
+- [ ] Confirm ordinary Capture, pinned launcher **Quick capture**, and Quick Settings **Quick capture** each create exactly one new Idea with no inherited continuation target. Retain the Issue #81 failure/retry/return checks above.
+
 ### Persistence and existing Idea utilities
 
 - [ ] Fully close and reopen the app. Ideas A and B return once, in the same relative order, with all continued Development in chronological order and no duplicate note or segment.

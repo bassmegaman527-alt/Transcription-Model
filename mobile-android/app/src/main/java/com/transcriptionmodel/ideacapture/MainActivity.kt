@@ -498,7 +498,7 @@
                                                 )
                                             },
                                             onTranscript = { pendingTranscript ->
-                                                val rawTranscript = appendTranscript(
+                                                val rawTranscript = assembleStoppedTranscript(
                                                     committedTranscript,
                                                     partialTranscript,
                                                     pendingTranscript,
@@ -1489,6 +1489,15 @@
         .all { permission -> context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED }
 
     private fun capturePermissions(): List<String> = listOf(Manifest.permission.RECORD_AUDIO)
+
+    internal fun assembleStoppedTranscript(
+        committedTranscript: String,
+        partialTranscriptAtStop: String,
+        pendingTranscript: String,
+    ): String = appendTranscript(
+        committedTranscript,
+        pendingTranscript.ifBlank { partialTranscriptAtStop },
+    )
 
     private fun appendTranscript(vararg transcriptParts: String): String = transcriptParts
         .map { it.trim() }
