@@ -4,6 +4,7 @@
     import android.content.Context
     import android.content.Intent
     import android.content.pm.PackageManager
+    import android.os.Build
     import android.os.Bundle
     import androidx.activity.compose.BackHandler
     import androidx.activity.ComponentActivity
@@ -124,7 +125,7 @@
         About("About", "ℹ️"),
     }
 
-    private data class PendingCaptureConfirmation(
+    internal data class PendingCaptureConfirmation(
         val transcript: String,
         val durationMillis: Long,
     )
@@ -157,11 +158,20 @@
                 var pendingMicrophonePermissionRequest by remember {
                     mutableStateOf<PendingMicrophonePermissionRequest?>(null)
                 }
-                var pendingCaptureConfirmation by remember { mutableStateOf<PendingCaptureConfirmation?>(null) }
+                val pendingCaptureConfirmation = CaptureForegroundService.pendingConfirmation
+                val ordinarySession = CaptureForegroundService.session
                 val coroutineScope = rememberCoroutineScope()
 
-                LaunchedEffect(appContext) {
+                LaunchedEffect(appContext, CaptureForegroundService.savedNoteId) {
                     notes = loadSavedNotes(appContext)
+                    CaptureForegroundService.savedNoteId?.let { savedId ->
+                        selectedNoteId = savedId
+                        selectedTab = AppTab.Inbox
+                    }
+                }
+
+                LaunchedEffect(ordinarySession) {
+                    if (continuationTarget == null) session = ordinarySession
                 }
 
                 val speechTranscriber = remember {
@@ -206,30 +216,11 @@
 
                 fun startSpeechCapture() {
                     isSavingCapture = false
-                    pendingCaptureConfirmation = null
                     session = CaptureSession(
                         status = CaptureStatus.Recording,
                         startedAtMillis = System.currentTimeMillis(),
                     )
                     speechTranscriber.start()
-                }
-
-                fun saveCapture(transcript: String, durationMillis: Long) {
-                    val note = Note(
-                        rawTranscript = transcript,
-                        sourceTranscript = transcript,
-                        structured = structureTranscript(transcript),
-                        durationMillis = durationMillis,
-                    )
-                    val updatedNotes = listOf(note) + notes
-                    notes = updatedNotes
-                    session = CaptureSession(status = CaptureStatus.Structuring)
-                    coroutineScope.launch {
-                        saveNotes(appContext, updatedNotes)
-                        session = CaptureSession(status = CaptureStatus.Structured)
-                        selectedTab = AppTab.Inbox
-                    }
-                    pendingCaptureConfirmation = null
                 }
 
                 fun discardContinuationAndNavigate(
@@ -240,7 +231,6 @@
                     speechTranscriber.cancel()
                     continuationTarget = null
                     isSavingCapture = false
-                    pendingCaptureConfirmation = null
                     session = CaptureSession()
                     selectedNoteId = if (
                         destinationTab == AppTab.Inbox &&
@@ -255,6 +245,30 @@
                     continuationRecoveryMessage = recoveryMessage
                 }
 
+                val notificationPermissionLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestPermission(),
+                ) { isGranted ->
+                    if (isGranted && continuationTarget == null) {
+                        CaptureForegroundService.start(appContext)
+                    } else if (!isGranted && continuationTarget == null) {
+                        session = CaptureSession(
+                            status = CaptureStatus.Failed,
+                            errorMessage = "Notification permission is required for the Stop control. No note was saved.",
+                        )
+                    }
+                }
+
+                fun startOrdinaryCapture() {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+                        PackageManager.PERMISSION_GRANTED
+                    ) {
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        CaptureForegroundService.start(appContext)
+                    }
+                }
+
                 val microphonePermissionLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.RequestPermission(),
                 ) permissionResult@ { isGranted ->
@@ -267,7 +281,11 @@
                     if (!requestIsStillActive) return@permissionResult
 
                     if (isGranted) {
-                        startSpeechCapture()
+                        if (permissionRequest.continuationAttemptId == null) {
+                            startOrdinaryCapture()
+                        } else {
+                            startSpeechCapture()
+                        }
                     } else {
                         session = CaptureSession(
                             status = CaptureStatus.Failed,
@@ -283,13 +301,20 @@
 
                 fun canStartSpeechCapture(): Boolean =
                     !session.isRecording &&
+                        !ordinarySession.isRecording &&
+                        ordinarySession.status != CaptureStatus.Structuring &&
+                        ordinarySession.status != CaptureStatus.AwaitingConfirmation &&
                         session.status != CaptureStatus.Structuring &&
                         session.status != CaptureStatus.AwaitingConfirmation &&
                         pendingMicrophonePermissionRequest == null
 
                 fun requestPermissionOrStartSpeechCapture() {
                     if (hasCapturePermissions(context)) {
-                        startSpeechCapture()
+                        if (continuationTarget == null) {
+                            startOrdinaryCapture()
+                        } else {
+                            startSpeechCapture()
+                        }
                     } else {
                         pendingMicrophonePermissionRequest = PendingMicrophonePermissionRequest(
                             continuationAttemptId = continuationTarget?.attemptId,
@@ -395,13 +420,7 @@
                         confirmButton = {
                             TextButton(
                                 onClick = {
-                                    if (pendingCaptureConfirmation != null) {
-                                        pendingCaptureConfirmation = null
-                                        saveCapture(
-                                            transcript = pendingCapture.transcript,
-                                            durationMillis = pendingCapture.durationMillis,
-                                        )
-                                    }
+                                    CaptureForegroundService.confirm(appContext)
                                 },
                             ) {
                                 Text(if (isEmptyCapture) "Save empty note" else "Save anyway")
@@ -410,9 +429,8 @@
                         dismissButton = {
                             TextButton(
                                 onClick = {
-                                    pendingCaptureConfirmation = null
+                                    CaptureForegroundService.discard()
                                     isSavingCapture = false
-                                    session = CaptureSession()
                                     selectedTab = AppTab.Capture
                                 },
                             ) {
@@ -434,6 +452,9 @@
                             AppTab.entries.forEach { tab ->
                                 NavigationBarItem(
                                     selected = selectedTab == tab,
+                                    enabled = tab == AppTab.Capture ||
+                                        (!ordinarySession.isRecording &&
+                                            ordinarySession.status != CaptureStatus.Structuring),
                                     onClick = {
                                         if (continuationTarget != null && tab != AppTab.Capture) {
                                             discardContinuationAndNavigate(destinationTab = tab)
@@ -470,13 +491,13 @@
                                 discardContinuationAndNavigate()
                             },
                             onStop = {
-                                if (!isSavingCapture && session.isRecording) {
+                                if (continuationTarget == null) {
+                                    CaptureForegroundService.stop(appContext)
+                                } else if (!isSavingCapture && session.isRecording) {
                                     isSavingCapture = true
                                     val activeContinuationTarget = continuationTarget
                                     val committedTranscript = session.committedTranscript
                                     val partialTranscript = session.partialTranscript
-                                    val startedAt = session.startedAtMillis ?: System.currentTimeMillis()
-                                    val durationMillis = System.currentTimeMillis() - startedAt
                                     session = session.copy(
                                         status = CaptureStatus.Structuring,
                                         partialTranscript = "",
@@ -549,17 +570,6 @@
                                                             )
                                                         }
                                                     }
-                                                } else if (
-                                                    rawTranscript.isBlank() ||
-                                                    rawTranscript.isPlaceholderCaptureTranscript()
-                                                ) {
-                                                    session = session.copy(status = CaptureStatus.AwaitingConfirmation)
-                                                    pendingCaptureConfirmation = PendingCaptureConfirmation(
-                                                        transcript = rawTranscript,
-                                                        durationMillis = durationMillis,
-                                                    )
-                                                } else {
-                                                    saveCapture(rawTranscript, durationMillis)
                                                 }
                                             },
                                         )
@@ -1499,7 +1509,7 @@
         pendingTranscript.ifBlank { partialTranscriptAtStop },
     )
 
-    private fun appendTranscript(vararg transcriptParts: String): String = transcriptParts
+    internal fun appendTranscript(vararg transcriptParts: String): String = transcriptParts
         .map { it.trim() }
         .filter { it.isNotBlank() }
         .fold("") { transcript, nextPart -> appendTranscriptPart(transcript, nextPart) }
@@ -1511,7 +1521,7 @@
         return if (continuation.isBlank()) transcript else "$transcript $continuation"
     }
 
-    private fun transcriptContinuation(transcript: String, nextPart: String): String {
+    internal fun transcriptContinuation(transcript: String, nextPart: String): String {
         if (transcript.isBlank()) return nextPart
 
         val transcriptWords = transcript.split(whitespaceSeparator)
@@ -1547,6 +1557,14 @@
     private suspend fun saveNotes(context: Context, notes: List<Note>) {
         context.notesDataStore.edit { preferences ->
             preferences[notesJsonKey] = notes.toJsonArray().toString()
+        }
+    }
+
+    internal suspend fun saveCapturedNote(context: Context, note: Note) {
+        context.notesDataStore.edit { preferences ->
+            val existingJson = preferences[notesJsonKey].orEmpty()
+            val existingNotes = if (existingJson.isBlank()) emptyList() else JSONArray(existingJson).toNotes()
+            preferences[notesJsonKey] = (listOf(note) + existingNotes).toJsonArray().toString()
         }
     }
 
