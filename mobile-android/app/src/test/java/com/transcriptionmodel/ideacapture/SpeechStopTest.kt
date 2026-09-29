@@ -11,6 +11,62 @@ import org.junit.Test
 
 class SpeechStopTest {
     @Test
+    fun `Stop assembly replaces superseded UI partial with returned segment`() {
+        val cases = listOf(
+            listOf("", "buy flower", "buy flour", "buy flour"),
+            listOf("", "call Alice tomorrow", "call Alice", "call Alice"),
+            listOf("remember the recipe", "buy flower", "buy flour", "remember the recipe buy flour"),
+            listOf("", "buy flower", "buy flour tomorrow", "buy flour tomorrow"),
+            listOf("", "buy flour", "buy flour", "buy flour"),
+            listOf("", "buy flour", "buy flour tomorrow", "buy flour tomorrow"),
+        )
+        for ((committed, partialAtStop, returned, expected) in cases) {
+            assertEquals(expected, assembleStoppedTranscript(committed, partialAtStop, returned))
+        }
+    }
+
+    @Test
+    fun `Stop assembly preserves committed boundaries and uses one fallback`() {
+        assertEquals(
+            "remember the recipe buy flour",
+            assembleStoppedTranscript("remember the recipe buy", "buy flower", "buy flour"),
+        )
+        assertEquals("latest partial", assembleStoppedTranscript("", "older partial", "latest partial"))
+        assertEquals("visible partial", assembleStoppedTranscript("", "visible partial", ""))
+        assertEquals("earlier words", assembleStoppedTranscript("earlier words", "", ""))
+        assertEquals("", assembleStoppedTranscript("", "", ""))
+    }
+
+    @Test
+    fun `selected segment reaches continuation once without changing other Idea fields`() {
+        val receiver = ContinuationReceiver("")
+        val pending = PendingSpeechStop()
+        pending.begin { result ->
+            result.dispatch(
+                isContinuation = true,
+                onFailure = { fail("Unexpected fatal result") },
+                onTranscript = { returned ->
+                    val assembled = assembleStoppedTranscript("", "buy flower", returned)
+                    val applied = applyVoiceContinuation(receiver.notes, "target", "typed cedar", assembled)
+                    assertTrue(applied is ContinuationApplicationResult.Applied)
+                    receiver.notes = (applied as ContinuationApplicationResult.Applied).notes
+                    receiver.persistenceWrites++
+                },
+            )
+        }
+        pending.complete("buy flour")
+        pending.complete("late duplicate")
+        assertEquals(1, receiver.persistenceWrites)
+        assertEquals("typed cedar\n\nbuy flour", receiver.notes[1].developmentContent)
+        assertEquals(receiver.originalNotes[0], receiver.notes[0])
+        assertEquals(receiver.originalNotes[2], receiver.notes[2])
+        assertEquals(
+            receiver.originalNotes[1].copy(developmentContent = "typed cedar\n\nbuy flour"),
+            receiver.notes[1],
+        )
+    }
+
+    @Test
     fun `fatal Stop errors never dispatch retained text to continuation application`() {
         val errors = mapOf(
             SpeechRecognizer.ERROR_NETWORK to "Network error during speech recognition.",
